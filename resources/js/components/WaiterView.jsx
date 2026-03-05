@@ -101,22 +101,22 @@ const WaiterView = ({ activeWaiter, onLogout }) => {
     }
 
     return (
-        <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row">
+        <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row relative pb-32 md:pb-0">
             {/* Panel Principal (Menú) */}
-            <div className="flex-1 p-6 overflow-y-auto w-full md:w-2/3">
-                <header className="mb-8 flex items-center justify-between">
+            <div className="flex-1 p-4 md:p-6 overflow-y-auto w-full md:w-2/3">
+                <header className="mb-6 flex flex-col space-y-4 md:space-y-0 md:flex-row items-start md:items-center justify-between">
                     <div>
-                        <h1 className="text-3xl font-black text-slate-800">Toma de Pedidos</h1>
+                        <h1 className="text-2xl md:text-3xl font-black text-slate-800">Toma de Pedidos</h1>
                         <p className="text-sm text-slate-500 font-medium tracking-tight">
                             Atendiendo: <span className="text-blue-600 font-bold ml-1">{activeWaiter?.name || 'Mesero'}</span>
                         </p>
                     </div>
-                    <div className="flex gap-3">
-                        <Link to="/" className="text-sm font-semibold text-blue-600 hover:text-blue-800 px-4 py-2 border border-blue-200 rounded-lg bg-blue-50 hover:bg-blue-100 transition-colors">
+                    <div className="flex w-full md:w-auto gap-3">
+                        <Link to="/" className="flex-1 md:flex-none text-center text-sm font-semibold text-blue-600 hover:text-blue-800 px-4 py-2 border border-blue-200 rounded-lg bg-blue-50 hover:bg-blue-100 transition-colors">
                             &larr; Volver
                         </Link>
                         {onLogout && (
-                            <button onClick={onLogout} className="text-sm font-semibold text-rose-600 hover:text-rose-800 px-4 py-2 border border-rose-200 rounded-lg bg-rose-50 hover:bg-rose-100 transition-colors">
+                            <button onClick={onLogout} className="flex-1 md:flex-none text-sm font-semibold text-rose-600 hover:text-rose-800 px-4 py-2 border border-rose-200 rounded-lg bg-rose-50 hover:bg-rose-100 transition-colors">
                                 Cerrar Turno
                             </button>
                         )}
@@ -159,18 +159,18 @@ const WaiterView = ({ activeWaiter, onLogout }) => {
                     </div>
                 </div>
 
-                <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
                     {filteredProducts.length === 0 ? (
                         <div className="col-span-full py-12 text-center text-slate-400 font-medium">No se encontraron productos con estos filtros.</div>
                     ) : (
                         filteredProducts.map(product => (
                             <div key={product.id}
                                 onClick={() => addToCart(product)}
-                                className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 cursor-pointer hover:border-blue-400 hover:shadow-md transition-all group">
-                                <h3 className="font-bold text-slate-700 group-hover:text-blue-700 transition-colors">{product.name}</h3>
-                                <div className="flex justify-between items-center mt-2">
-                                    <span className="text-blue-600 font-extrabold">${parseFloat(product.price).toFixed(2)}</span>
-                                    <span className="text-xs font-semibold text-slate-400 bg-slate-100 px-2 py-1 rounded-full">{product.category?.name || 'Varios'}</span>
+                                className="bg-white p-3 md:p-4 rounded-xl shadow-sm border border-slate-100 cursor-pointer hover:border-blue-400 hover:shadow-md transition-all group flex flex-col justify-between h-full">
+                                <h3 className="font-bold text-sm md:text-base text-slate-700 group-hover:text-blue-700 transition-colors line-clamp-2 leading-tight">{product.name}</h3>
+                                <div className="flex justify-between items-center mt-3">
+                                    <span className="text-blue-600 font-extrabold text-base md:text-lg">${parseFloat(product.price).toFixed(2)}</span>
+                                    <span className="text-[10px] md:text-xs font-semibold text-slate-400 bg-slate-100 px-2 py-1 rounded-full">{product.category?.name || 'Varios'}</span>
                                 </div>
                             </div>
                         ))
@@ -178,11 +178,27 @@ const WaiterView = ({ activeWaiter, onLogout }) => {
                 </div>
             </div>
 
-            {/* Panel Lateral (Carrito y Mesa) */}
-            <div className="w-full md:w-1/3 bg-white border-l border-slate-200 p-6 flex flex-col h-screen sticky top-0">
-                <h2 className="text-xl font-bold text-slate-800 mb-6">Detalle del Pedido</h2>
+            {/* Panel Lateral / Inferior (Carrito y Mesa) */}
+            <div className="fixed md:sticky bottom-0 left-0 right-0 md:top-0 w-full md:w-1/3 bg-white border-t md:border-t-0 md:border-l border-slate-200 p-4 md:p-6 flex flex-col max-h-[60vh] md:max-h-screen md:h-screen shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.1)] md:shadow-none z-50 rounded-t-2xl md:rounded-none">
+                <div className="flex justify-between items-center mb-4 md:mb-6">
+                    <h2 className="text-lg md:text-xl font-bold text-slate-800">Detalle Pedido <span className="md:hidden bg-blue-100 text-blue-700 text-xs py-0.5 px-2 rounded-full ml-1">{cart.length}</span></h2>
+                    <div className="w-1/2 md:hidden">
+                        <select
+                            className="w-full bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2"
+                            value={selectedTable}
+                            onChange={(e) => setSelectedTable(e.target.value)}
+                        >
+                            <option value="">-- MESA --</option>
+                            {tables.map(table => (
+                                <option key={table.id} value={table.id} className={table.status === 'ocupada' ? 'text-amber-600 font-semibold' : ''}>
+                                    M. {table.number} {table.status === 'ocupada' ? '(+)' : ''}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+                </div>
 
-                <div className="mb-6">
+                <div className="hidden md:block mb-6">
                     <label className="block text-sm font-semibold text-slate-600 mb-2">Mesa Asignada</label>
                     <select
                         className="w-full bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5"
@@ -198,36 +214,36 @@ const WaiterView = ({ activeWaiter, onLogout }) => {
                     </select>
                 </div>
 
-                <div className="flex-1 overflow-y-auto bg-slate-50 rounded-xl p-4 border border-slate-100 mb-6 space-y-3">
+                <div className="flex-1 overflow-y-auto bg-slate-50 rounded-xl p-2 md:p-4 border border-slate-100 mb-4 md:mb-6 space-y-2 md:space-y-3">
                     {cart.length === 0 ? (
-                        <p className="text-center text-slate-400 text-sm font-medium mt-10">El carrito está vacío</p>
+                        <p className="text-center text-slate-400 text-xs md:text-sm font-medium mt-4 md:mt-10">El carrito está vacío</p>
                     ) : (
                         cart.map(item => (
-                            <div key={item.product_id} className="flex flex-col bg-white p-3 rounded-lg shadow-sm">
-                                <div className="flex justify-between items-center mb-2">
-                                    <div className="flex-1">
-                                        <h4 className="font-semibold text-slate-700 text-sm truncate">{item.name}</h4>
-                                        <p className="text-blue-600 font-bold text-sm">${(item.price * item.quantity).toFixed(2)}</p>
+                            <div key={item.product_id} className="flex flex-col bg-white p-2 md:p-3 rounded-lg shadow-sm border border-slate-50">
+                                <div className="flex justify-between items-center mb-1.5 md:mb-2">
+                                    <div className="flex-1 pr-2">
+                                        <h4 className="font-semibold text-slate-700 text-xs md:text-sm leading-tight text-wrap">{item.name}</h4>
+                                        <p className="text-blue-600 font-bold text-xs md:text-sm">${(item.price * item.quantity).toFixed(2)}</p>
                                     </div>
-                                    <div className="flex items-center gap-2">
-                                        <button onClick={() => updateQuantity(item.product_id, -1)} className="w-7 h-7 flex items-center justify-center rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold">-</button>
-                                        <span className="font-bold w-4 text-center text-slate-800">{item.quantity}</span>
-                                        <button onClick={() => updateQuantity(item.product_id, 1)} className="w-7 h-7 flex items-center justify-center rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold">+</button>
+                                    <div className="flex items-center gap-1.5 md:gap-2">
+                                        <button onClick={() => updateQuantity(item.product_id, -1)} className="w-6 h-6 md:w-7 md:h-7 flex items-center justify-center rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-sm">-</button>
+                                        <span className="font-bold w-3 md:w-4 text-center text-slate-800 text-xs md:text-base">{item.quantity}</span>
+                                        <button onClick={() => updateQuantity(item.product_id, 1)} className="w-6 h-6 md:w-7 md:h-7 flex items-center justify-center rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-sm">+</button>
 
                                         {/* Botón Eliminar Ítem completo */}
                                         <button
                                             onClick={() => removeFromCart(item.product_id)}
-                                            className="w-7 h-7 flex items-center justify-center rounded-full bg-rose-50 hover:bg-rose-100 text-rose-500 hover:text-rose-700 ml-1 transition-colors"
+                                            className="w-6 h-6 md:w-7 md:h-7 flex items-center justify-center rounded-full bg-rose-50 hover:bg-rose-100 text-rose-500 hover:text-rose-700 ml-0.5 md:ml-1 transition-colors"
                                             title="Eliminar del pedido"
                                         >
-                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                            <svg className="w-3.5 h-3.5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                                         </button>
                                     </div>
                                 </div>
                                 <input
                                     type="text"
-                                    placeholder="Nota a cocina (ej: Sin cebolla)"
-                                    className="w-full text-xs p-1 border border-slate-200 rounded text-slate-600 focus:border-blue-400 focus:ring-0"
+                                    placeholder="Nota: Sin cebolla..."
+                                    className="w-full text-[10px] md:text-xs p-1 md:p-1 border border-slate-200 rounded text-slate-600 focus:border-blue-400 focus:ring-0"
                                     value={item.notes || ''}
                                     onChange={(e) => updateNotes(item.product_id, e.target.value)}
                                 />
@@ -236,15 +252,15 @@ const WaiterView = ({ activeWaiter, onLogout }) => {
                     )}
                 </div>
 
-                <div className="mt-auto border-t border-slate-200 pt-4">
-                    <div className="flex justify-between items-center mb-4">
-                        <span className="text-slate-500 font-bold text-lg">Total</span>
-                        <span className="text-3xl font-black text-slate-800">${cartTotal.toFixed(2)}</span>
+                <div className="mt-auto border-t border-slate-200 pt-3 md:pt-4">
+                    <div className="flex justify-between items-center mb-3 md:mb-4 px-1">
+                        <span className="text-slate-500 font-bold text-sm md:text-lg">Total Pedido</span>
+                        <span className="text-xl md:text-3xl font-black text-slate-800">${cartTotal.toFixed(2)}</span>
                     </div>
                     <button
                         onClick={submitOrder}
                         disabled={cart.length === 0 || !selectedTable}
-                        className="w-full bg-blue-600 text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-200 hover:bg-blue-700 hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                        className="w-full bg-blue-600 text-white font-bold py-3 md:py-4 rounded-xl shadow-lg shadow-blue-200 hover:bg-blue-700 hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm md:text-base">
                         Enviar a Cocina
                     </button>
                 </div>

@@ -147,7 +147,7 @@ const AdminView = () => {
             fetchData();
             alert('Categoría creada exitosamente');
         } catch (error) {
-            alert('Error al crear categoría. Asegúrate de que el nombre sea único.');
+            alert('Error al crear categoría. Verifica los datos o tu conexión.');
         }
     };
 

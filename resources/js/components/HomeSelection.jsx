@@ -3,17 +3,17 @@ import { Link } from 'react-router-dom';
 
 const HomeSelection = () => {
     return (
-        <div className="min-h-screen bg-gray-50 flex flex-col items-center py-12 px-4 sm:px-6 lg:px-8">
-            <div className="max-w-md w-full mb-10 text-center">
-                <h1 className="text-4xl font-black text-slate-800 tracking-tight">
+        <div className="min-h-screen bg-gray-50 flex flex-col items-center py-8 md:py-12 px-4 sm:px-6 lg:px-8">
+            <div className="max-w-md w-full mb-8 md:mb-10 text-center">
+                <h1 className="text-3xl md:text-4xl font-black text-slate-800 tracking-tight leading-tight md:leading-normal">
                     Sistema de Restaurante
                 </h1>
-                <p className="mt-3 text-lg text-gray-500 font-medium">
+                <p className="mt-2 text-base md:text-lg text-gray-500 font-medium px-4 md:px-0">
                     Seleccione su área de trabajo interactiva
                 </p>
             </div>
 
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 max-w-4xl w-full">
+            <div className="grid grid-cols-1 gap-4 md:gap-6 sm:grid-cols-2 max-w-4xl w-full">
                 {/* Botón Mesero */}
                 <Link to="/mesero" className="group flex flex-col items-center bg-white p-8 rounded-2xl shadow-sm border border-gray-100 transition-all hover:shadow-xl hover:border-blue-200">
                     <div className="flex h-16 w-16 items-center justify-center rounded-full bg-blue-100 text-blue-600 mb-4 group-hover:scale-110 transition-transform">
