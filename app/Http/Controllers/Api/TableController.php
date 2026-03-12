@@ -27,7 +27,8 @@ class TableController extends Controller
     {
         $validated = $request->validate([
             'number' => 'sometimes|integer|unique:tables,number,'.$table->id,
-            'status' => 'sometimes|in:libre,ocupada'
+            'status' => 'sometimes|in:libre,ocupada',
+            'needs_cleaning' => 'sometimes|boolean'
         ]);
 
         $table->update($validated);

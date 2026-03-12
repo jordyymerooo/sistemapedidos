@@ -162,7 +162,10 @@ class OrderController extends Controller
                 
                 // Actualizar todos los detalles a pagado si tuviéramos ese field,
                 // como no tenemos field status en el order_detail, la order manda.
-                Table::where('id', $order->table_id)->update(['status' => 'libre']);
+                Table::where('id', $order->table_id)->update([
+                    'status' => 'libre',
+                    'needs_cleaning' => true
+                ]);
                 $message = 'Cobro total exitoso. Mesa liberada.';
             } else {
                 // Cobro Parcial: Si envían items específicos.
@@ -201,7 +204,10 @@ class OrderController extends Controller
                 if ($order->details->count() === 0) {
                     // Si se cobraron todos por separado en este último batch, cerrar padre
                     $order->update(['status' => 'pagado', 'total' => 0]);
-                    Table::where('id', $order->table_id)->update(['status' => 'libre']);
+                    Table::where('id', $order->table_id)->update([
+                        'status' => 'libre',
+                        'needs_cleaning' => true
+                    ]);
                     $message = 'Cobro final exitoso. Mesa liberada.';
                 } else {
                     $order->update(['total' => $nuevoTotal]);

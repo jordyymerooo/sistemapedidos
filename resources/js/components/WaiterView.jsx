@@ -9,6 +9,7 @@ const WaiterView = ({ activeWaiter, onLogout }) => {
     const [selectedTable, setSelectedTable] = useState('');
     const [cart, setCart] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [showCleaningModal, setShowCleaningModal] = useState(false);
 
     // Filtros
     const [searchQuery, setSearchQuery] = useState('');
@@ -96,6 +97,21 @@ const WaiterView = ({ activeWaiter, onLogout }) => {
         }
     };
 
+    const handleCleanTable = async (tableId) => {
+        try {
+            await axios.patch(`/api/tables/${tableId}`, { needs_cleaning: false });
+            fetchData(); // Refresca para quitar de la lista sucia
+            // Si era la última por limpiar, cerramos modal solitos
+            const remainingDirty = dirtyTables.filter(t => t.id !== tableId);
+            if (remainingDirty.length === 0) setShowCleaningModal(false);
+        } catch (error) {
+            console.error("Error marcando la mesa como limpia", error);
+            alert("No se pudo marcar la mesa como limpia");
+        }
+    };
+
+    const dirtyTables = tables.filter(t => t.needs_cleaning);
+
     if (loading && products.length === 0) {
         return <div className="flex h-screen items-center justify-center font-bold text-slate-400">Cargando Menú...</div>;
     }
@@ -111,7 +127,19 @@ const WaiterView = ({ activeWaiter, onLogout }) => {
                             Atendiendo: <span className="text-blue-600 font-bold ml-1">{activeWaiter?.name || 'Mesero'}</span>
                         </p>
                     </div>
-                    <div className="flex w-full md:w-auto gap-3">
+                    <div className="flex w-full md:w-auto items-center gap-3">
+                        <button
+                            onClick={() => dirtyTables.length > 0 && setShowCleaningModal(true)}
+                            className="relative flex items-center justify-center h-10 w-10 text-slate-600 hover:text-amber-600 focus:outline-none transition-colors"
+                        >
+                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path></svg>
+                            {dirtyTables.length > 0 && (
+                                <span className="absolute top-0 right-0 flex items-center justify-center h-5 w-5 rounded-full bg-rose-500 text-white text-[10px] font-bold ring-2 ring-white">
+                                    {dirtyTables.length}
+                                </span>
+                            )}
+                        </button>
+
                         <Link to="/" className="flex-1 md:flex-none text-center text-sm font-semibold text-blue-600 hover:text-blue-800 px-4 py-2 border border-blue-200 rounded-lg bg-blue-50 hover:bg-blue-100 transition-colors">
                             &larr; Volver
                         </Link>
@@ -122,6 +150,47 @@ const WaiterView = ({ activeWaiter, onLogout }) => {
                         )}
                     </div>
                 </header>
+
+                {/* MODAL CAMPANITA */}
+                {showCleaningModal && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm">
+                        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm flex flex-col p-6 relative">
+                            <button 
+                                onClick={() => setShowCleaningModal(false)}
+                                className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"
+                            >
+                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                            </button>
+                            <h2 className="text-xl font-black text-slate-800 mb-2 flex items-center gap-2">
+                                <span className="text-2xl">🧹</span> Tareas de Limpieza
+                            </h2>
+                            <p className="text-sm text-slate-500 mb-6 font-medium border-b border-slate-100 pb-4">
+                                Las siguientes mesas han sido liberadas por caja y requieren limpieza para recibir a nuevos clientes.
+                            </p>
+
+                            <ul className="space-y-3 mb-6 max-h-60 overflow-y-auto">
+                                {dirtyTables.map(table => (
+                                    <li key={table.id} className="flex items-center justify-between p-3 rounded-xl border border-rose-100 bg-rose-50/50">
+                                        <div className="flex flex-col">
+                                            <span className="font-bold text-slate-800">Mesa {table.number}</span>
+                                            <span className="text-[10px] font-semibold text-rose-500 uppercase tracking-widest">Sucia</span>
+                                        </div>
+                                        <button 
+                                            onClick={() => handleCleanTable(table.id)}
+                                            className="px-4 py-2 bg-rose-500 hover:bg-rose-600 text-white font-bold text-xs rounded-lg shadow shadow-rose-200 transition-all"
+                                        >
+                                            Ya Limpié ✓
+                                        </button>
+                                    </li>
+                                ))}
+                            </ul>
+
+                            <button onClick={() => setShowCleaningModal(false)} className="w-full text-center text-sm font-bold text-slate-600 hover:text-slate-800 py-3 rounded-xl bg-slate-100 transition-colors">
+                                Cerrar Ventana
+                            </button>
+                        </div>
+                    </div>
+                )}
 
                 {/* Filtros de Requerimientos (Buscador y Categorías) */}
                 <div className="mb-6 space-y-4">
