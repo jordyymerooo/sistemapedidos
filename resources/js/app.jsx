@@ -12,6 +12,8 @@ import WaiterView from './components/WaiterView';
 import RoleLogin from './components/RoleLogin';
 import CashierView from './components/CashierView';
 
+import WaiterDashboard from './components/WaiterDashboard';
+
 const AppRouter = () => {
     // Estados de sesión independientes
     const [activeWaiter, setActiveWaiter] = useState(null);
@@ -24,8 +26,13 @@ const AppRouter = () => {
             <Routes>
                 <Route path="/" element={<HomeSelection />} />
 
-                {/* RUTA MESERO */}
+                {/* RUTAS MESERO */}
                 <Route path="/mesero" element={
+                    !activeWaiter
+                        ? <RoleLogin roleName="mesero" roleLabel="Meseros" onLogin={setActiveWaiter} />
+                        : <WaiterDashboard activeWaiter={activeWaiter} onLogout={() => setActiveWaiter(null)} />
+                } />
+                <Route path="/mesero/pedido/:tableId" element={
                     !activeWaiter
                         ? <RoleLogin roleName="mesero" roleLabel="Meseros" onLogin={setActiveWaiter} />
                         : <WaiterView activeWaiter={activeWaiter} onLogout={() => setActiveWaiter(null)} />

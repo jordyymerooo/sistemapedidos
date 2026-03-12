@@ -1,15 +1,29 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Link } from 'react-router-dom';
+import { Link, useParams, useNavigate } from 'react-router-dom';
 
 const WaiterView = ({ activeWaiter, onLogout }) => {
+    const { tableId } = useParams(); // Extrae la mesa de la URL
+    const navigate = useNavigate();
+
     const [tables, setTables] = useState([]);
     const [products, setProducts] = useState([]);
     const [categories, setCategories] = useState([]);
-    const [selectedTable, setSelectedTable] = useState('');
+    // Mesa bloqueada y seteada por URL
+    const [selectedTable, setSelectedTable] = useState(tableId || '');
+
     const [cart, setCart] = useState([]);
+    const [readyOrders, setReadyOrders] = useState([]); // Comandas en barra esperando
     const [loading, setLoading] = useState(true);
     const [showCleaningModal, setShowCleaningModal] = useState(false);
+    const [showReadyModal, setShowReadyModal] = useState(false); // Modal comandas
+
+    // Redirigir si alguien entra aquí sin una mesa válida
+    useEffect(() => {
+        if (!tableId) {
+            navigate('/mesero');
+        }
+    }, [tableId, navigate]);
 
     // Filtros
     const [searchQuery, setSearchQuery] = useState('');
@@ -23,14 +37,16 @@ const WaiterView = ({ activeWaiter, onLogout }) => {
 
     const fetchData = async () => {
         try {
-            const [tablesRes, productsRes, categoriesRes] = await Promise.all([
+            const [tablesRes, productsRes, categoriesRes, readyRes] = await Promise.all([
                 axios.get('/api/tables'),
                 axios.get('/api/products'),
-                axios.get('/api/categories')
+                axios.get('/api/categories'),
+                axios.get('/api/orders/ready')
             ]);
             setTables(tablesRes.data);
             if (products.length === 0) setProducts(productsRes.data);
             if (categories.length === 0) setCategories(categoriesRes.data);
+            setReadyOrders(readyRes.data);
             setLoading(false);
         } catch (error) {
             console.error("Error fetching data", error);
@@ -89,8 +105,7 @@ const WaiterView = ({ activeWaiter, onLogout }) => {
             });
             alert("¡Pedido enviado a cocina!");
             setCart([]);
-            setSelectedTable('');
-            fetchData(); // Refrescar mesas
+            navigate('/mesero'); // Volvemos al Dashboard Automáticamente
         } catch (error) {
             console.error("Error submitting order", error);
             alert("Ocurrió un error al enviar el pedido.");
@@ -107,6 +122,17 @@ const WaiterView = ({ activeWaiter, onLogout }) => {
         } catch (error) {
             console.error("Error marcando la mesa como limpia", error);
             alert("No se pudo marcar la mesa como limpia");
+        }
+    };
+
+    const handleDeliverOrder = async (orderId) => {
+        try {
+            await axios.patch(`/api/orders/${orderId}/deliver`);
+            fetchData();
+            const remainingReady = readyOrders.filter(o => o.id !== orderId);
+            if (remainingReady.length === 0) setShowReadyModal(false);
+        } catch (error) {
+            console.error("Error despachando orden a la mesa", error);
         }
     };
 
@@ -128,6 +154,20 @@ const WaiterView = ({ activeWaiter, onLogout }) => {
                         </p>
                     </div>
                     <div className="flex w-full md:w-auto items-center gap-3">
+                        {/* Botón Comandas en Barra */}
+                        <button
+                            onClick={() => readyOrders.length > 0 && setShowReadyModal(true)}
+                            className={`relative flex items-center justify-center h-10 w-10 text-slate-600 focus:outline-none transition-colors ${readyOrders.length > 0 ? 'text-blue-600 hover:text-blue-800 animate-bounce' : 'hover:text-amber-600'}`}
+                            title="Comandas Listas"
+                        >
+                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 15.546c-.523 0-1.046.151-1.5.454a2.704 2.704 0 01-3 0 2.704 2.704 0 00-3 0 2.704 2.704 0 01-3 0 2.704 2.704 0 00-3 0 2.704 2.704 0 01-3 0 2.701 2.701 0 00-1.5-.454M9 6v2m3-2v2m3-2v2M9 3h.01M12 3h.01M15 3h.01M21 21v-7a2 2 0 00-2-2H5a2 2 0 00-2 2v7h18zm-3-9v-2a2 2 0 00-2-2H8a2 2 0 00-2 2v2h12z"></path></svg>
+                            {readyOrders.length > 0 && (
+                                <span className="absolute -top-1 -right-1 flex items-center justify-center h-5 w-5 rounded-full bg-blue-500 text-white text-[10px] font-bold ring-2 ring-white">
+                                    {readyOrders.length}
+                                </span>
+                            )}
+                        </button>
+
                         <button
                             onClick={() => dirtyTables.length > 0 && setShowCleaningModal(true)}
                             className="relative flex items-center justify-center h-10 w-10 text-slate-600 hover:text-amber-600 focus:outline-none transition-colors"
@@ -140,8 +180,8 @@ const WaiterView = ({ activeWaiter, onLogout }) => {
                             )}
                         </button>
 
-                        <Link to="/" className="flex-1 md:flex-none text-center text-sm font-semibold text-blue-600 hover:text-blue-800 px-4 py-2 border border-blue-200 rounded-lg bg-blue-50 hover:bg-blue-100 transition-colors">
-                            &larr; Volver
+                        <Link to="/mesero" className="flex-1 md:flex-none text-center text-sm font-semibold text-blue-600 hover:text-blue-800 px-4 py-2 border border-blue-200 rounded-lg bg-blue-50 hover:bg-blue-100 transition-colors">
+                            &larr; Mapa de Mesas
                         </Link>
                         {onLogout && (
                             <button onClick={onLogout} className="flex-1 md:flex-none text-sm font-semibold text-rose-600 hover:text-rose-800 px-4 py-2 border border-rose-200 rounded-lg bg-rose-50 hover:bg-rose-100 transition-colors">
@@ -155,7 +195,7 @@ const WaiterView = ({ activeWaiter, onLogout }) => {
                 {showCleaningModal && (
                     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm">
                         <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm flex flex-col p-6 relative">
-                            <button 
+                            <button
                                 onClick={() => setShowCleaningModal(false)}
                                 className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"
                             >
@@ -175,7 +215,7 @@ const WaiterView = ({ activeWaiter, onLogout }) => {
                                             <span className="font-bold text-slate-800">Mesa {table.number}</span>
                                             <span className="text-[10px] font-semibold text-rose-500 uppercase tracking-widest">Sucia</span>
                                         </div>
-                                        <button 
+                                        <button
                                             onClick={() => handleCleanTable(table.id)}
                                             className="px-4 py-2 bg-rose-500 hover:bg-rose-600 text-white font-bold text-xs rounded-lg shadow shadow-rose-200 transition-all"
                                         >
@@ -187,6 +227,57 @@ const WaiterView = ({ activeWaiter, onLogout }) => {
 
                             <button onClick={() => setShowCleaningModal(false)} className="w-full text-center text-sm font-bold text-slate-600 hover:text-slate-800 py-3 rounded-xl bg-slate-100 transition-colors">
                                 Cerrar Ventana
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                {/* MODAL COMANDAS EN BARRA (LISTAS PARA SERVIR) */}
+                {showReadyModal && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm">
+                        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md flex flex-col p-6 relative">
+                            <button
+                                onClick={() => setShowReadyModal(false)}
+                                className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"
+                            >
+                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                            </button>
+                            <h2 className="text-xl font-black text-slate-800 mb-2 flex items-center gap-2">
+                                <span className="text-2xl">🏃‍♂️💨</span> Entregas Pendientes
+                            </h2>
+                            <p className="text-sm text-slate-500 mb-4 font-medium border-b border-slate-100 pb-4">
+                                Busca estas bandejas en la barra de cocina y llévalas a la mesa.
+                            </p>
+
+                            <div className="space-y-4 mb-6 max-h-[60vh] overflow-y-auto pr-1">
+                                {readyOrders.map(order => (
+                                    <div key={order.id} className="border border-blue-100 bg-blue-50/50 rounded-xl overflow-hidden flex flex-col">
+                                        <div className="bg-blue-600 text-white px-4 py-2 flex justify-between items-center text-sm font-bold">
+                                            <span>Mesa {order.table?.number}</span>
+                                            <span className="text-xs bg-white text-blue-600 px-2 py-0.5 rounded-full shadow-inner">{order.details?.length || 0} Platos</span>
+                                        </div>
+                                        <div className="p-3">
+                                            <ul className="text-sm text-slate-700 font-semibold mb-3 space-y-1">
+                                                {order.details?.map(detail => (
+                                                    <li key={detail.id} className="flex justify-between border-b border-blue-100/50 pb-1">
+                                                        <span>- {detail.product?.name}</span>
+                                                        <span className="text-blue-500">x{detail.quantity}</span>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                            <button
+                                                onClick={() => handleDeliverOrder(order.id)}
+                                                className="w-full px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-black text-xs md:text-sm rounded-lg shadow shadow-blue-200 transition-all uppercase tracking-wider"
+                                            >
+                                                Lo llevé a la mesa ✓
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            <button onClick={() => setShowReadyModal(false)} className="w-full text-center text-sm font-bold text-slate-600 hover:text-slate-800 py-3 rounded-xl bg-slate-100 transition-colors mt-auto">
+                                Ocultar
                             </button>
                         </div>
                     </div>
@@ -250,37 +341,16 @@ const WaiterView = ({ activeWaiter, onLogout }) => {
             {/* Panel Lateral / Inferior (Carrito y Mesa) */}
             <div className="fixed md:sticky bottom-0 left-0 right-0 md:top-0 w-full md:w-1/3 bg-white border-t md:border-t-0 md:border-l border-slate-200 p-4 md:p-6 flex flex-col max-h-[60vh] md:max-h-screen md:h-screen shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.1)] md:shadow-none z-50 rounded-t-2xl md:rounded-none">
                 <div className="flex justify-between items-center mb-4 md:mb-6">
-                    <h2 className="text-lg md:text-xl font-bold text-slate-800">Detalle Pedido <span className="md:hidden bg-blue-100 text-blue-700 text-xs py-0.5 px-2 rounded-full ml-1">{cart.length}</span></h2>
-                    <div className="w-1/2 md:hidden">
-                        <select
-                            className="w-full bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2"
-                            value={selectedTable}
-                            onChange={(e) => setSelectedTable(e.target.value)}
-                        >
-                            <option value="">-- MESA --</option>
-                            {tables.map(table => (
-                                <option key={table.id} value={table.id} className={table.status === 'ocupada' ? 'text-amber-600 font-semibold' : ''}>
-                                    M. {table.number} {table.status === 'ocupada' ? '(+)' : ''}
-                                </option>
-                            ))}
-                        </select>
-                    </div>
+                    <h2 className="text-lg md:text-xl font-bold text-slate-800 flex items-center">
+                        Mesa {tables.find(t => t.id == selectedTable)?.number}
+                        <span className="md:hidden bg-blue-100 text-blue-700 text-xs py-0.5 px-2 rounded-full ml-2">{cart.length} ítems</span>
+                    </h2>
                 </div>
 
-                <div className="hidden md:block mb-6">
-                    <label className="block text-sm font-semibold text-slate-600 mb-2">Mesa Asignada</label>
-                    <select
-                        className="w-full bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5"
-                        value={selectedTable}
-                        onChange={(e) => setSelectedTable(e.target.value)}
-                    >
-                        <option value="">-- Seleccionar Mesa --</option>
-                        {tables.map(table => (
-                            <option key={table.id} value={table.id} className={table.status === 'ocupada' ? 'text-amber-600 font-semibold' : ''}>
-                                Mesa {table.number} {table.status === 'ocupada' ? '(Activa - Añadir)' : '(Libre)'}
-                            </option>
-                        ))}
-                    </select>
+                <div className="hidden md:block mb-6 bg-blue-50/50 p-4 rounded-xl border border-blue-100">
+                    <label className="block text-xs uppercase tracking-wide font-black text-blue-500 mb-1">Mesa Seleccionada</label>
+                    <div className="text-xl font-black text-slate-700">Mesa {tables.find(t => t.id == selectedTable)?.number}</div>
+                    <div className="text-xs font-semibold text-slate-500 mt-1">Estatus actual: <span className="uppercase text-slate-600 font-bold">{tables.find(t => t.id == selectedTable)?.status}</span></div>
                 </div>
 
                 <div className="flex-1 overflow-y-auto bg-slate-50 rounded-xl p-2 md:p-4 border border-slate-100 mb-4 md:mb-6 space-y-2 md:space-y-3">

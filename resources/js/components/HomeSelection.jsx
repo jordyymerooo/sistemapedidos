@@ -1,16 +1,87 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import axios from 'axios';
 
 const HomeSelection = () => {
+    const [metrics, setMetrics] = useState({
+        tables_free: 0,
+        tables_occupied: 0,
+        orders_pending: 0,
+        orders_served: 0
+    });
+
+    useEffect(() => {
+        const fetchMetrics = async () => {
+            try {
+                const { data } = await axios.get('/api/metrics');
+                setMetrics({
+                    tables_free: data.tables?.free || 0,
+                    tables_occupied: data.tables?.occupied || 0,
+                    orders_pending: data.orders?.pending || 0,
+                    orders_served: data.orders?.served || 0
+                });
+            } catch (error) {
+                console.error("Error fetching home metrics", error);
+            }
+        };
+        fetchMetrics();
+        const intervalId = setInterval(fetchMetrics, 10000);
+        return () => clearInterval(intervalId);
+    }, []);
+
+    const getGreeting = () => {
+        const hour = new Date().getHours();
+        if (hour < 12) return 'BUENOS DÍAS';
+        if (hour < 18) return 'BUENAS TARDES';
+        return 'BUENAS NOCHES';
+    };
+
     return (
-        <div className="min-h-screen bg-gray-50 flex flex-col items-center py-8 md:py-12 px-4 sm:px-6 lg:px-8">
-            <div className="max-w-md w-full mb-8 md:mb-10 text-center">
-                <h1 className="text-3xl md:text-4xl font-black text-slate-800 tracking-tight leading-tight md:leading-normal">
-                    Sistema de Restaurante
+        <div className="min-h-screen bg-slate-50 flex flex-col items-center py-8 md:py-12 px-4 sm:px-6 lg:px-8">
+            <div className="max-w-md w-full mb-8 text-center">
+                <span className="text-xs font-bold text-slate-500 tracking-widest uppercase">{getGreeting()}</span>
+                <h1 className="text-3xl md:text-4xl font-black text-slate-800 tracking-tight mt-1 mb-2">
+                    ¿Qué módulo necesitas?
                 </h1>
-                <p className="mt-2 text-base md:text-lg text-gray-500 font-medium px-4 md:px-0">
-                    Seleccione su área de trabajo interactiva
+                <p className="text-sm text-slate-500 font-medium">
+                    Selecciona tu área para acceder a los módulos
                 </p>
+            </div>
+
+            {/* Tarjetas de Estadísticas Top */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-4xl w-full mb-8">
+                {/* 1 */}
+                <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between">
+                    <div className="flex items-center text-emerald-500 mb-2">
+                        <svg className="w-5 h-5 mr-1" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    </div>
+                    <span className="text-2xl font-black text-slate-800">{metrics.tables_free}</span>
+                    <span className="text-xs font-semibold text-slate-500 mt-1">Mesas disponibles</span>
+                </div>
+                {/* 2 */}
+                <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between">
+                    <div className="flex items-center text-rose-500 mb-2">
+                        <svg className="w-5 h-5 mr-1" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5V10H2v10h5m10 0v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5m10 0H7"></path></svg>
+                    </div>
+                    <span className="text-2xl font-black text-slate-800">{metrics.tables_occupied}</span>
+                    <span className="text-xs font-semibold text-slate-500 mt-1">Mesas ocupadas</span>
+                </div>
+                {/* 3 */}
+                <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between">
+                    <div className="flex items-center text-amber-500 mb-2">
+                        <svg className="w-5 h-5 mr-1" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9.5a2.5 2.5 0 00-2.5-2.5H15"></path></svg>
+                    </div>
+                    <span className="text-2xl font-black text-slate-800">{metrics.orders_pending}</span>
+                    <span className="text-xs font-semibold text-slate-500 mt-1">En cocina</span>
+                </div>
+                {/* 4 */}
+                <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between">
+                    <div className="flex items-center text-blue-500 mb-2">
+                        <svg className="w-5 h-5 mr-1" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    </div>
+                    <span className="text-2xl font-black text-slate-800">{metrics.orders_served}</span>
+                    <span className="text-xs font-semibold text-slate-500 mt-1">Mesas por cobrar</span>
+                </div>
             </div>
 
             <div className="grid grid-cols-1 gap-4 md:gap-6 sm:grid-cols-2 max-w-4xl w-full">

@@ -28,8 +28,11 @@ class OrderController extends Controller
      */
     public function pending()
     {
-        $orders = Order::with(['details.product', 'table', 'user'])
+        $orders = Order::with(['details' => function ($query) {
+                $query->whereIn('status', ['pendiente', 'en_preparacion'])->with('product');
+            }, 'table', 'user'])
             ->whereIn('status', ['pendiente', 'en_preparacion'])
+            ->orderBy('created_at', 'asc')
             ->get();
 
         return response()->json($orders);
@@ -118,12 +121,51 @@ class OrderController extends Controller
             return response()->json(['error' => 'Estado de pedido no válido para esta acción'], 400);
         }
 
-        $order->update(['status' => 'servido']);
+        // 1. Marcar los detalles individuales que estaban pendientes como listos para retirar en barra
+        $order->details()->whereIn('status', ['pendiente', 'en_preparacion'])->update(['status' => 'listo']);
+
+        // 2. Marcar la orden global como lista para recoger (Notificar a Meseros)
+        $order->update(['status' => 'listo']);
 
         // Aquí enviaríamos notificación al cajero/mesero:
         // broadcast(new OrderReady($order))->toOthers();
 
-        return response()->json(['message' => 'Pedido listo para entregar', 'order' => $order]);
+        return response()->json(['message' => 'Pedido en barra. Avisando a Meseros.', 'order' => $order]);
+    }
+
+    /**
+     * Return orders that are ready to be picked up by waiters
+     */
+    public function ready()
+    {
+        $orders = Order::with(['details' => function ($query) {
+                $query->where('status', 'listo')->with('product');
+            }, 'table', 'user'])
+            ->where('status', 'listo')
+            ->orderBy('updated_at', 'asc')
+            ->get();
+
+        return response()->json($orders);
+    }
+
+    /**
+     * Waiter marks an order as DELIVERED to the table
+     */
+    public function deliver($id)
+    {
+        $order = Order::findOrFail($id);
+
+        if ($order->status !== 'listo') {
+            return response()->json(['error' => 'Solo se pueden entregar a la mesa pedidos que ya estén listos'], 400);
+        }
+
+        // 1. Marcar detalles listos como ya entregados ("servido") en mesa
+        $order->details()->where('status', 'listo')->update(['status' => 'servido']);
+
+        // 2. Marcar orden global como "servido" (Pasar a Caja)
+        $order->update(['status' => 'servido']);
+
+        return response()->json(['message' => 'Pedido entregado en la mesa correctamente.', 'order' => $order]);
     }
 
     /**

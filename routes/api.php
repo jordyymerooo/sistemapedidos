@@ -33,7 +33,9 @@ Route::apiResource('tables', TableController::class);
 // Rutas de Órdenes
 Route::get('/orders', [OrderController::class, 'index']);
 Route::get('/orders/pending', [OrderController::class, 'pending']);
+Route::get('/orders/ready', [OrderController::class, 'ready']); // Mostrar en barra
 Route::get('/orders/served', [OrderController::class, 'served']);
 Route::post('/orders', [OrderController::class, 'store']);
 Route::patch('/orders/{order}/ready', [OrderController::class, 'markAsReady']);
+Route::patch('/orders/{order}/deliver', [OrderController::class, 'deliver']); // Servir a la mesa
 Route::patch('/orders/{order}/pay', [OrderController::class, 'pay']);
