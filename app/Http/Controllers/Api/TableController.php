@@ -26,9 +26,10 @@ class TableController extends Controller
     public function update(Request $request, \App\Models\Table $table)
     {
         $validated = $request->validate([
-            'number' => 'sometimes|integer|unique:tables,number,'.$table->id,
-            'status' => 'sometimes|in:libre,ocupada',
-            'needs_cleaning' => 'sometimes|boolean'
+            'number'         => 'sometimes|integer|unique:tables,number,'.$table->id,
+            'status'         => 'sometimes|in:libre,ocupada',
+            'needs_cleaning' => 'sometimes|boolean',
+            'needs_waiter'   => 'sometimes|boolean',
         ]);
 
         $table->update($validated);
@@ -40,4 +41,19 @@ class TableController extends Controller
         $table->delete();
         return response()->json(null, 204);
     }
+
+    // ---- Llamada al mesero ----
+
+    public function callWaiter(\App\Models\Table $table)
+    {
+        $table->update(['needs_waiter' => true]);
+        return response()->json($table);
+    }
+
+    public function dismissWaiter(\App\Models\Table $table)
+    {
+        $table->update(['needs_waiter' => false]);
+        return response()->json($table);
+    }
 }
+

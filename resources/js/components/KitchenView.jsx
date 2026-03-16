@@ -5,11 +5,13 @@ import { Link } from 'react-router-dom';
 // Configurar axios globalmente para Sanctum (opcional, dependiendo de tu auth)
 axios.defaults.withCredentials = true;
 
-const KitchenView = () => {
+const KitchenView = ({ onLogout }) => {
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [shiftActive, setShiftActive] = useState(true);
     const [checkedItems, setCheckedItems] = useState({});
     const [currentTime, setCurrentTime] = useState(new Date());
+    const [isProcessing, setIsProcessing] = useState(false);
 
     useEffect(() => {
         fetchPendingOrders();
@@ -30,11 +32,14 @@ const KitchenView = () => {
 
     const fetchPendingOrders = async () => {
         try {
-            // Nota: La URL depende de tu enrutamiento API en Laravel
-            const { data } = await axios.get('/api/orders/pending');
-            setOrders(data);
+            const [ordersRes, shiftRes] = await Promise.all([
+                axios.get('/api/orders/pending'),
+                axios.get('/api/shifts/current')
+            ]);
+            setOrders(ordersRes.data);
+            setShiftActive(!!shiftRes.data);
         } catch (error) {
-            console.error('Error al obtener los pedidos:', error);
+            console.error('Error al obtener los datos de cocina:', error);
         } finally {
             setLoading(false);
         }
@@ -49,6 +54,8 @@ const KitchenView = () => {
     };
 
     const handleMarkAsReady = async (orderId) => {
+        if (isProcessing) return;
+        setIsProcessing(true);
         try {
             // Actualización optimista: lo removemos de la UI instantáneamente
             setOrders(currentOrders => currentOrders.filter(o => o.id !== orderId));
@@ -58,6 +65,8 @@ const KitchenView = () => {
             console.error('Ocurrió un error al despachar', error);
             // Revertir si falla
             fetchPendingOrders();
+        } finally {
+            setIsProcessing(false);
         }
     };
 
@@ -85,19 +94,55 @@ const KitchenView = () => {
         return <div className="flex h-screen items-center justify-center font-bold text-gray-400">Cargando comandas de cocina...</div>;
     }
 
+    if (!shiftActive) {
+        return (
+            <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-6 text-center">
+                <div className="bg-white/10 backdrop-blur-xl p-10 rounded-[3rem] border border-white/20 shadow-2xl max-w-sm">
+                    <div className="text-6xl mb-6">🧑‍🍳💤</div>
+                    <h2 className="text-3xl font-black text-white mb-4">COCINA CERRADA</h2>
+                    <p className="text-slate-300 font-medium mb-8">
+                        La jornada laboral no ha iniciado. El tablero se activará automáticamente cuando Caja abra el día.
+                    </p>
+                    <div className="inline-flex items-center gap-2 text-amber-400 font-bold bg-amber-400/10 px-4 py-2 rounded-full border border-amber-400/20">
+                        <span className="relative flex h-3 w-3">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-3 w-3 bg-amber-500"></span>
+                        </span>
+                        Esperando señal de Caja...
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="min-h-screen bg-gray-50 p-4 md:p-6">
             <header className="mb-6 md:mb-8 flex flex-col md:flex-row items-start md:items-center justify-between space-y-3 md:space-y-0">
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-4 flex-wrap">
                     <h1 className="text-2xl md:text-3xl font-black text-slate-800">Vista de Cocina</h1>
                     <span className="rounded-full bg-orange-100 px-3 py-1 text-xs md:text-sm font-semibold text-orange-700 w-fit">
                         {orders.length} pedidos pendientes
                     </span>
+                    <span className="text-xs font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">
+                        🇪🇨 {currentTime.toLocaleString('es-EC', {
+                            timeZone: 'America/Guayaquil',
+                            weekday: 'short', day: '2-digit', month: 'short',
+                            hour: '2-digit', minute: '2-digit', second: '2-digit'
+                        })}
+                    </span>
                 </div>
-                <div className="flex w-full md:w-auto">
+                <div className="flex w-full md:w-auto items-center gap-3">
                     <Link to="/" className="flex-1 md:flex-none text-center text-sm font-semibold text-orange-600 hover:text-orange-800 px-4 py-2 border border-orange-200 rounded-lg bg-orange-50 hover:bg-orange-100 transition-colors">
                         &larr; Volver
                     </Link>
+                    {onLogout && (
+                        <button
+                            onClick={onLogout}
+                            className="flex-1 md:flex-none text-sm font-semibold text-rose-600 hover:text-rose-800 px-4 py-2 border border-rose-200 rounded-lg bg-rose-50 hover:bg-rose-100 transition-colors"
+                        >
+                            Cerrar Turno
+                        </button>
+                    )}
                 </div>
             </header>
 
@@ -171,9 +216,10 @@ const KitchenView = () => {
 
                                     <button
                                         onClick={() => handleMarkAsReady(order.id)}
-                                        className="w-full rounded-lg bg-emerald-600 py-3 md:py-3.5 font-bold text-white text-sm md:text-base transition-colors hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
+                                        disabled={isProcessing}
+                                        className={`w-full rounded-lg bg-emerald-600 py-3 md:py-3.5 font-bold text-white text-sm md:text-base transition-colors hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 ${isProcessing ? 'opacity-50 cursor-not-allowed' : ''}`}
                                     >
-                                        ¡Comanda Lista! ✓
+                                        {isProcessing ? 'Procesando...' : '¡Comanda Lista! ✓'}
                                     </button>
                                 </div>
                             </article>

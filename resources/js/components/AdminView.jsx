@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Link } from 'react-router-dom';
 
-const AdminView = () => {
-    const [activeTab, setActiveTab] = useState('tables'); // tables, personnel, orders, products
+const AdminView = ({ onLogout }) => {
+    const [activeTab, setActiveTab] = useState('tables');
 
     // CRUD States
     const [tables, setTables] = useState([]);
@@ -11,7 +11,11 @@ const AdminView = () => {
     const [orders, setOrders] = useState([]);
     const [products, setProducts] = useState([]);
     const [categories, setCategories] = useState([]);
+    const [shifts, setShifts] = useState([]);
+    const [auditLogs, setAuditLogs] = useState([]);
+    const [alerts, setAlerts] = useState({ count: 0, alerts: [] });
     const [loading, setLoading] = useState(true);
+    const [processing, setProcessing] = useState(false);
 
     // Form States
     const [newTableNum, setNewTableNum] = useState('');
@@ -46,6 +50,16 @@ const AdminView = () => {
                 if (catData.data.length > 0) {
                     setNewProduct(prev => ({ ...prev, category_id: catData.data[0].id }));
                 }
+            } else if (activeTab === 'shifts') {
+                const { data } = await axios.get('/api/shifts');
+                setShifts(data);
+            } else if (activeTab === 'audit') {
+                const [logsRes, alertsRes] = await Promise.all([
+                    axios.get('/api/audit-logs'),
+                    axios.get('/api/alerts')
+                ]);
+                setAuditLogs(logsRes.data);
+                setAlerts(alertsRes.data);
             }
         } catch (error) {
             console.error('Error fetching admin data', error);
@@ -57,6 +71,8 @@ const AdminView = () => {
     // --- LOGICA DE MESAS ---
     const handleCreateTable = async (e) => {
         e.preventDefault();
+        if (processing) return;
+        setProcessing(true);
         try {
             await axios.post('/api/tables', { number: newTableNum, status: 'libre' });
             setNewTableNum('');
@@ -64,6 +80,9 @@ const AdminView = () => {
             alert('Mesa creada exitosamente');
         } catch (error) {
             alert('Error al crear mesa (quizás el número ya existe)');
+        } finally {
+            setProcessing(true);
+            setProcessing(false);
         }
     };
 
@@ -80,6 +99,8 @@ const AdminView = () => {
     // --- LOGICA DE PERSONAL ---
     const handleCreateUser = async (e) => {
         e.preventDefault();
+        if (processing) return;
+        setProcessing(true);
         try {
             await axios.post('/api/users', newUser);
             setNewUser({ name: '', email: '', password: '', role: 'mesero' });
@@ -87,6 +108,8 @@ const AdminView = () => {
             alert('Personal registrado exitosamente');
         } catch (error) {
             alert('Error al registrar personal. Revisa que el email sea único y el PIN tenga +4 caracteres.');
+        } finally {
+            setProcessing(false);
         }
     };
 
@@ -100,9 +123,32 @@ const AdminView = () => {
         }
     };
 
+    const handleChangeUserPin = async (user) => {
+        const newPin = prompt(`Ingrese el NUEVO PIN para el empleado: ${user.name}\n\nDebe tener 4 caracteres o más:`);
+
+        if (newPin === null) return; // Si el administrador cancela
+
+        if (newPin.trim().length < 4) {
+            alert('Error: El PIN debe tener un mínimo de 4 caracteres de largo.');
+            return;
+        }
+
+        try {
+            await axios.put(`/api/users/${user.id}`, {
+                password: newPin.trim()
+            });
+            alert(`✅ PIN Actualizado exitosamente para ${user.name}`);
+        } catch (error) {
+            console.error(error);
+            alert('Hubo un error al intentar cambiar el PIN. Inténtalo de nuevo.');
+        }
+    };
+
     // --- LOGICA DE PRODUCTOS ---
     const handleCreateProduct = async (e) => {
         e.preventDefault();
+        if (processing) return;
+        setProcessing(true);
         try {
             await axios.post('/api/products', newProduct);
             setNewProduct({ name: '', price: '', stock: 0, category_id: categories.length > 0 ? categories[0].id : '' });
@@ -110,6 +156,8 @@ const AdminView = () => {
             alert('Producto añadido al menú');
         } catch (error) {
             alert('Error al agregar el producto');
+        } finally {
+            setProcessing(false);
         }
     };
 
@@ -119,6 +167,8 @@ const AdminView = () => {
 
     const handleUpdateProduct = async (e) => {
         e.preventDefault();
+        if (processing) return;
+        setProcessing(true);
         try {
             await axios.put(`/api/products/${editingProduct.id}`, editingProduct);
             setEditingProduct(null);
@@ -126,6 +176,8 @@ const AdminView = () => {
             alert('Producto actualizado correctamente');
         } catch (error) {
             alert('Error al actualizar el producto');
+        } finally {
+            setProcessing(false);
         }
     };
 
@@ -141,6 +193,8 @@ const AdminView = () => {
 
     const handleCreateCategory = async (e) => {
         e.preventDefault();
+        if (processing) return;
+        setProcessing(true);
         try {
             await axios.post('/api/categories', { name: newCategoryName });
             setNewCategoryName('');
@@ -148,6 +202,8 @@ const AdminView = () => {
             alert('Categoría creada exitosamente');
         } catch (error) {
             alert('Error al crear categoría. Verifica los datos o tu conexión.');
+        } finally {
+            setProcessing(false);
         }
     };
 
@@ -169,9 +225,19 @@ const AdminView = () => {
                     <h1 className="text-3xl font-black text-slate-800">Panel de Administración</h1>
                     <p className="text-sm text-slate-500 font-medium">Gestiona tu restaurante en tiempo real</p>
                 </div>
-                <Link to="/" className="text-sm font-semibold text-purple-600 hover:text-purple-800 px-4 py-2 border border-purple-200 rounded-lg bg-purple-50 hover:bg-purple-100 transition-colors">
-                    &larr; Volver al Menú
-                </Link>
+                <div className="flex items-center gap-3">
+                    <Link to="/" className="text-sm font-semibold text-purple-600 hover:text-purple-800 px-4 py-2 border border-purple-200 rounded-lg bg-purple-50 hover:bg-purple-100 transition-colors">
+                        &larr; Volver al Menú
+                    </Link>
+                    {onLogout && (
+                        <button
+                            onClick={onLogout}
+                            className="text-sm font-semibold text-rose-600 hover:text-rose-800 px-4 py-2 border border-rose-200 rounded-lg bg-rose-50 hover:bg-rose-100 transition-colors"
+                        >
+                            Cerrar Turno
+                        </button>
+                    )}
+                </div>
             </header>
 
             {/* Sub-Navegación TABS */}
@@ -180,6 +246,13 @@ const AdminView = () => {
                 <button onClick={() => setActiveTab('products')} className={`px-4 py-2 font-bold rounded-t-lg transition-colors ${activeTab === 'products' ? 'text-purple-600 border-b-2 border-purple-600 bg-purple-50/50' : 'text-slate-500 hover:text-slate-800'}`}>Catálogo y Menú</button>
                 <button onClick={() => setActiveTab('tables')} className={`px-4 py-2 font-bold rounded-t-lg transition-colors ${activeTab === 'tables' ? 'text-purple-600 border-b-2 border-purple-600 bg-purple-50/50' : 'text-slate-500 hover:text-slate-800'}`}>Gestión de Mesas</button>
                 <button onClick={() => setActiveTab('personnel')} className={`px-4 py-2 font-bold rounded-t-lg transition-colors ${activeTab === 'personnel' ? 'text-purple-600 border-b-2 border-purple-600 bg-purple-50/50' : 'text-slate-500 hover:text-slate-800'}`}>Personal y Roles</button>
+                <button onClick={() => setActiveTab('shifts')} className={`px-4 py-2 font-bold rounded-t-lg transition-colors ${activeTab === 'shifts' ? 'text-purple-600 border-b-2 border-purple-600 bg-purple-50/50' : 'text-slate-500 hover:text-slate-800'}`}>Registro de Jornadas</button>
+                <button onClick={() => setActiveTab('audit')} className={`relative px-4 py-2 font-bold rounded-t-lg transition-colors ${activeTab === 'audit' ? 'text-rose-600 border-b-2 border-rose-600 bg-rose-50/50' : 'text-slate-500 hover:text-slate-800'}`}>
+                    Auditoría
+                    {alerts.count > 0 && (
+                        <span className="absolute -top-1 -right-1 bg-rose-500 text-white text-xs font-black rounded-full w-5 h-5 flex items-center justify-center">{alerts.count}</span>
+                    )}
+                </button>
             </div>
 
             {/* TAB: MESAS */}
@@ -190,9 +263,11 @@ const AdminView = () => {
                         <form onSubmit={handleCreateTable} className="space-y-4">
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 mb-1">Número de Mesa</label>
-                                <input type="number" required min="1" className="w-full border-slate-200 rounded-lg focus:ring-purple-500 focus:border-purple-500" value={newTableNum} onChange={(e) => setNewTableNum(e.target.value)} />
+                                <input type="number" required min="1" className="w-full border-slate-200 rounded-lg focus:ring-purple-500 focus:border-purple-500" value={newTableNum} onChange={(e) => setNewTableNum(e.target.value)} disabled={processing} />
                             </div>
-                            <button type="submit" className="w-full bg-purple-600 text-white font-bold py-3 rounded-xl hover:bg-purple-700">Añadir Mesa</button>
+                            <button type="submit" disabled={processing} className={`w-full bg-purple-600 text-white font-bold py-3 rounded-xl hover:bg-purple-700 ${processing ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                                {processing ? 'Procesando...' : 'Añadir Mesa'}
+                            </button>
                         </form>
                     </div>
 
@@ -239,9 +314,11 @@ const AdminView = () => {
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 mb-1">Contraseña / PIN <span className="text-xs font-normal text-slate-400">(Mín. 4)</span></label>
-                                <input type="password" required minLength="4" className="w-full border-slate-200 rounded-lg focus:ring-purple-500 focus:border-purple-500" value={newUser.password} onChange={(e) => setNewUser({ ...newUser, password: e.target.value })} />
+                                <input type="password" required minLength="4" className="w-full border-slate-200 rounded-lg focus:ring-purple-500 focus:border-purple-500" value={newUser.password} onChange={(e) => setNewUser({ ...newUser, password: e.target.value })} disabled={processing} />
                             </div>
-                            <button type="submit" className="w-full bg-purple-600 text-white font-bold py-3 rounded-xl hover:bg-purple-700 mt-2">Crear Credenciales</button>
+                            <button type="submit" disabled={processing} className={`w-full bg-purple-600 text-white font-bold py-3 rounded-xl hover:bg-purple-700 mt-2 ${processing ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                                {processing ? 'Guardando...' : 'Crear Credenciales'}
+                            </button>
                         </form>
                     </div>
 
@@ -269,8 +346,9 @@ const AdminView = () => {
                                             </span>
                                         </td>
                                         <td className="px-4 py-3 text-right">
+                                            <button onClick={() => handleChangeUserPin(user)} className="text-blue-600 hover:text-blue-800 font-medium text-xs px-2 py-1 rounded border border-blue-200 bg-blue-50 mr-2 transition-colors">Cambiar PIN</button>
                                             {user.id !== 1 && (
-                                                <button onClick={() => handleDeleteUser(user.id)} className="text-rose-500 hover:text-rose-700 font-medium text-xs px-2 py-1 rounded border border-rose-200 bg-rose-50">Dar de Baja</button>
+                                                <button onClick={() => handleDeleteUser(user.id)} className="text-rose-500 hover:text-rose-700 font-medium text-xs px-2 py-1 rounded border border-rose-200 bg-rose-50 transition-colors">Dar de Baja</button>
                                             )}
                                         </td>
                                     </tr>
@@ -351,9 +429,11 @@ const AdminView = () => {
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-slate-700 mb-1">Precio Unitario ($)</label>
-                                    <input type="number" step="0.01" required min="0.01" className="w-full border-slate-200 rounded-lg focus:ring-purple-500 focus:border-purple-500" value={newProduct.price} onChange={(e) => setNewProduct({ ...newProduct, price: parseFloat(e.target.value) })} />
+                                    <input type="number" step="0.01" required min="0.01" className="w-full border-slate-200 rounded-lg focus:ring-purple-500 focus:border-purple-500" value={newProduct.price} onChange={(e) => setNewProduct({ ...newProduct, price: parseFloat(e.target.value) })} disabled={processing} />
                                 </div>
-                                <button type="submit" className="w-full bg-purple-600 text-white font-bold py-3 rounded-xl hover:bg-purple-700 mt-2">Publicar en Menú</button>
+                                <button type="submit" disabled={processing} className={`w-full bg-purple-600 text-white font-bold py-3 rounded-xl hover:bg-purple-700 mt-2 ${processing ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                                    {processing ? 'Guardando...' : 'Publicar en Menú'}
+                                </button>
                             </form>
                         </div>
 
@@ -362,9 +442,11 @@ const AdminView = () => {
                             <form onSubmit={handleCreateCategory} className="space-y-4">
                                 <div>
                                     <label className="block text-sm font-medium text-slate-700 mb-1">Nombre de la Categoría</label>
-                                    <input type="text" required className="w-full border-slate-200 rounded-lg focus:ring-blue-500 focus:border-blue-500" value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)} />
+                                    <input type="text" required className="w-full border-slate-200 rounded-lg focus:ring-blue-500 focus:border-blue-500" value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)} disabled={processing} />
                                 </div>
-                                <button type="submit" className="w-full bg-blue-600 text-white font-bold py-3 rounded-xl hover:bg-blue-700 mt-2">Crear Categoría</button>
+                                <button type="submit" disabled={processing} className={`w-full bg-blue-600 text-white font-bold py-3 rounded-xl hover:bg-blue-700 mt-2 ${processing ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                                    {processing ? '...' : 'Crear Categoría'}
+                                </button>
                             </form>
                         </div>
                     </div>
@@ -397,8 +479,10 @@ const AdminView = () => {
                                                     <input type="number" step="0.01" className="w-full text-xs p-1 border border-purple-200 rounded focus:ring-purple-500" value={editingProduct.price} onChange={e => setEditingProduct({ ...editingProduct, price: parseFloat(e.target.value) })} />
                                                 </td>
                                                 <td className="px-4 py-3 text-right flex justify-end gap-2">
-                                                    <button onClick={handleUpdateProduct} className="text-emerald-700 hover:text-emerald-900 font-bold text-xs px-2 py-1 rounded border border-emerald-300 bg-emerald-100 shadow-sm focus:ring-2 focus:ring-emerald-500">Guardar</button>
-                                                    <button onClick={() => setEditingProduct(null)} className="text-slate-600 hover:text-slate-800 font-medium text-xs px-2 py-1 rounded border border-slate-300 bg-white">Cancelar</button>
+                                                    <button onClick={handleUpdateProduct} disabled={processing} className={`text-emerald-700 hover:text-emerald-900 font-bold text-xs px-2 py-1 rounded border border-emerald-300 bg-emerald-100 shadow-sm focus:ring-2 focus:ring-emerald-500 ${processing ? 'opacity-50' : ''}`}>
+                                                        {processing ? '...' : 'Guardar'}
+                                                    </button>
+                                                    <button onClick={() => setEditingProduct(null)} disabled={processing} className="text-slate-600 hover:text-slate-800 font-medium text-xs px-2 py-1 rounded border border-slate-300 bg-white disabled:opacity-50">Cancelar</button>
                                                 </td>
                                             </tr>
                                         ) : (
@@ -429,6 +513,140 @@ const AdminView = () => {
                                     </div>
                                 ))}
                             </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* TAB: JORNADAS */}
+            {activeTab === 'shifts' && (
+                <div className="flex-1 bg-white rounded-2xl p-6 shadow-sm border border-slate-100 border-t-4 border-t-purple-500 overflow-hidden flex flex-col">
+                    <h3 className="text-lg font-bold text-slate-800 mb-4">Auditoría de Aperturas y Cierres</h3>
+                    <div className="overflow-x-auto flex-1">
+                        <table className="w-full text-left text-sm text-slate-600 mt-2">
+                            <thead className="bg-slate-50 border-b border-slate-200 text-slate-700 uppercase text-xs font-bold">
+                                <tr>
+                                    <th className="px-4 py-3">Fecha</th>
+                                    <th className="px-4 py-3">Hora de Inicio</th>
+                                    <th className="px-4 py-3">Hora de Finalización</th>
+                                    <th className="px-4 py-3">Estado</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                                {shifts.length === 0 ? (
+                                    <tr><td colSpan="4" className="text-center py-8 text-slate-400 font-medium">Aún no se han registrado jornadas laborales.</td></tr>
+                                ) : (
+                                    shifts.map(shift => (
+                                        <tr key={shift.id} className="hover:bg-slate-50/50">
+                                            <td className="px-4 py-3 font-bold text-slate-800">
+                                                {new Date(shift.start_time).toLocaleDateString()}
+                                            </td>
+                                            <td className="px-4 py-3 text-slate-700">
+                                                {new Date(shift.start_time).toLocaleTimeString()}
+                                            </td>
+                                            <td className="px-4 py-3 text-slate-700">
+                                                {shift.end_time ? new Date(shift.end_time).toLocaleTimeString() : '---'}
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                <span className={`px-2 py-1 rounded text-xs font-bold uppercase 
+                                                    ${shift.status === 'open' ? 'bg-green-100 text-green-700 animate-pulse' : 'bg-slate-100 text-slate-700'}`}>
+                                                    {shift.status === 'open' ? 'En Curso (Abierto)' : 'Finalizado'}
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    ))
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
+
+            {/* TAB: AUDITORÍA */}
+            {activeTab === 'audit' && (
+                <div className="space-y-6">
+
+                    {/* PANEL DE ALERTAS */}
+                    {alerts.alerts.length > 0 && (
+                        <div className="bg-white rounded-2xl shadow-sm border border-rose-200 p-6">
+                            <h3 className="text-lg font-bold text-rose-700 mb-4 flex items-center gap-2">
+                                ⚠️ Alertas de Inconsistencias ({alerts.count})
+                            </h3>
+                            <div className="space-y-3">
+                                {alerts.alerts.map((alert, i) => (
+                                    <div key={i} className={`flex items-start gap-3 p-3 rounded-xl border text-sm font-medium
+                                        ${alert.level === 'critical' ? 'bg-red-50 border-red-200 text-red-700' : 'bg-amber-50 border-amber-200 text-amber-700'}`}>
+                                        <span>{alert.level === 'critical' ? '🔴' : '🟡'}</span>
+                                        <span>{alert.message}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                    {alerts.alerts.length === 0 && (
+                        <div className="bg-green-50 border border-green-200 rounded-2xl p-5 text-green-700 font-semibold flex items-center gap-3">
+                            ✅ Sin alertas de inconsistencias. El sistema está operando con normalidad.
+                        </div>
+                    )}
+
+                    {/* TABLA DE LOGS */}
+                    <div className="bg-white rounded-2xl shadow-sm border border-slate-100">
+                        <div className="p-5 border-b border-slate-100">
+                            <h3 className="font-bold text-slate-800 text-lg">Registro de Acciones ({auditLogs.length})</h3>
+                            <p className="text-sm text-slate-500">Últimas 200 acciones del sistema</p>
+                        </div>
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-sm">
+                                <thead className="bg-slate-50">
+                                    <tr>
+                                        <th className="px-4 py-3 text-left font-bold text-slate-600 text-xs uppercase tracking-wider">Fecha / Hora</th>
+                                        <th className="px-4 py-3 text-left font-bold text-slate-600 text-xs uppercase tracking-wider">Acción</th>
+                                        <th className="px-4 py-3 text-left font-bold text-slate-600 text-xs uppercase tracking-wider">Usuario</th>
+                                        <th className="px-4 py-3 text-left font-bold text-slate-600 text-xs uppercase tracking-wider">Detalles</th>
+                                        <th className="px-4 py-3 text-left font-bold text-slate-600 text-xs uppercase tracking-wider">IP</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                    {auditLogs.length === 0 ? (
+                                        <tr><td colSpan={5} className="text-center py-10 text-slate-400">No hay registros de auditoría aún.</td></tr>
+                                    ) : (
+                                        auditLogs.map(log => (
+                                            <tr key={log.id} className="hover:bg-slate-50/50">
+                                                <td className="px-4 py-3 text-slate-500 whitespace-nowrap font-mono text-xs">
+                                                    {log.created_at
+                                                        ? new Date(log.created_at).toLocaleString('es-EC', {
+                                                            timeZone: 'America/Guayaquil',
+                                                            year: 'numeric', month: '2-digit', day: '2-digit',
+                                                            hour: '2-digit', minute: '2-digit', second: '2-digit'
+                                                        })
+                                                        : '---'}
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    <span className={`px-2 py-0.5 rounded-full text-xs font-bold uppercase
+                                                        ${log.action === 'login_success' ? 'bg-green-100 text-green-700'
+                                                            : log.action === 'login_failed' ? 'bg-red-100 text-red-700'
+                                                                : log.action === 'login_blocked_no_shift' ? 'bg-orange-100 text-orange-700'
+                                                                    : log.action === 'shift_start' ? 'bg-blue-100 text-blue-700'
+                                                                        : log.action === 'shift_end' ? 'bg-slate-200 text-slate-700'
+                                                                            : log.action === 'order_created' ? 'bg-violet-100 text-violet-700'
+                                                                                : log.action === 'order_items_added' ? 'bg-indigo-100 text-indigo-700'
+                                                                                    : log.action === 'order_ready' ? 'bg-orange-100 text-orange-700'
+                                                                                        : log.action === 'order_delivered' ? 'bg-cyan-100 text-cyan-700'
+                                                                                            : log.action === 'order_paid' ? 'bg-emerald-100 text-emerald-700'
+                                                                                                : 'bg-amber-100 text-amber-700'}`}>
+                                                        {log.action.replace(/_/g, ' ')}
+                                                    </span>
+                                                </td>
+                                                <td className="px-4 py-3 font-semibold text-slate-700">{log.user_name}</td>
+                                                <td className="px-4 py-3 text-slate-500 text-xs max-w-xs truncate">
+                                                    {log.details ? JSON.stringify(log.details) : '---'}
+                                                </td>
+                                                <td className="px-4 py-3 text-slate-400 font-mono text-xs">{log.ip_address || '---'}</td>
+                                            </tr>
+                                        ))
+                                    )}
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 </div>

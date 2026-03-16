@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\Table;
+use App\Models\AuditLog;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -91,17 +92,28 @@ class OrderController extends Controller
             // Recalcular total completo sumando todos los detalles
             $nuevoTotal = $order->details()->sum('subtotal');
             $order->update(['total' => $nuevoTotal]);
-
             Table::where('id', $validated['table_id'])->update(['status' => 'ocupada']);
+
+            $wasNew  = $order->wasRecentlyCreated;
+            $orderId = $order->id;
 
             DB::commit();
 
-            // Aquí se emitiría el evento de Reverb/Pusher:
-            // broadcast(new OrderCreated($order))->toOthers();
+            // Audit FUERA de la transacción para evitar rollbacks
+            if ($wasNew) {
+                AuditLog::record('order_created', $validated['user_id'], 'order', $orderId, [
+                    'table_id'   => $validated['table_id'],
+                    'items_count'=> count($validated['items'])
+                ]);
+            } else {
+                AuditLog::record('order_items_added', $validated['user_id'], 'order', $orderId, [
+                    'items_added' => array_map(fn($i) => 'prod#' . $i['product_id'] . 'x' . $i['quantity'], $validated['items'])
+                ]);
+            }
 
             return response()->json([
                 'message' => 'Pedido enviado a cocina exitosamente.',
-                'order' => $order->load(['details.product', 'table'])
+                'order'   => $order->load(['details.product', 'table'])
             ], 201);
 
         } catch (\Exception $e) {
@@ -121,28 +133,26 @@ class OrderController extends Controller
             return response()->json(['error' => 'Estado de pedido no válido para esta acción'], 400);
         }
 
-        // 1. Marcar los detalles individuales que estaban pendientes como listos para retirar en barra
-        $order->details()->whereIn('status', ['pendiente', 'en_preparacion'])->update(['status' => 'listo']);
+        $order->details()->whereIn('status', ['pendiente', 'en_preparacion'])->update(['status' => 'servido']);
+        $order->update(['status' => 'servido']);
 
-        // 2. Marcar la orden global como lista para recoger (Notificar a Meseros)
-        $order->update(['status' => 'listo']);
+        AuditLog::record('order_ready', null, 'order', $order->id, [
+            'table_id' => $order->table_id
+        ]);
 
-        // Aquí enviaríamos notificación al cajero/mesero:
-        // broadcast(new OrderReady($order))->toOthers();
-
-        return response()->json(['message' => 'Pedido en barra. Avisando a Meseros.', 'order' => $order]);
+        return response()->json(['message' => 'Pedido finalizado por cocina. Enviado a Caja.', 'order' => $order]);
     }
 
     /**
-     * Return orders that are ready to be picked up by waiters
+     * Return recently finished orders (last 3 minutes) as ephemeral notifications for waiters
      */
     public function ready()
     {
-        $orders = Order::with(['details' => function ($query) {
-                $query->where('status', 'listo')->with('product');
-            }, 'table', 'user'])
-            ->where('status', 'listo')
-            ->orderBy('updated_at', 'asc')
+        // Traer órdenes recién terminadas por la cocina (status 'servido') en los últimos 3 minutos
+        $orders = Order::with(['details.product', 'table', 'user'])
+            ->where('status', 'servido')
+            ->where('updated_at', '>=', now()->subMinutes(3))
+            ->orderBy('updated_at', 'desc')
             ->get();
 
         return response()->json($orders);
@@ -159,22 +169,26 @@ class OrderController extends Controller
             return response()->json(['error' => 'Solo se pueden entregar a la mesa pedidos que ya estén listos'], 400);
         }
 
-        // 1. Marcar detalles listos como ya entregados ("servido") en mesa
         $order->details()->where('status', 'listo')->update(['status' => 'servido']);
-
-        // 2. Marcar orden global como "servido" (Pasar a Caja)
         $order->update(['status' => 'servido']);
+
+        AuditLog::record('order_delivered', null, 'order', $order->id, [
+            'table_id' => $order->table_id
+        ]);
 
         return response()->json(['message' => 'Pedido entregado en la mesa correctamente.', 'order' => $order]);
     }
 
     /**
-     * Return orders that are ready and waiting to be paid
+     * Return orders that are active and not fully paid
      */
     public function served()
     {
+        // En lugar de solo 'servido', la CAJA ahora verá todas las órdenes activas
+        // Esto permite cobros anticipados (Fast Food) o post-consumo, y da métricas reales.
         $orders = Order::with(['details.product', 'table', 'user'])
-            ->where('status', 'servido')
+            ->whereIn('status', ['pendiente', 'en_preparacion', 'listo', 'servido'])
+            ->orderBy('id', 'asc') // Las más antiguas primero
             ->get();
 
         return response()->json($orders);
@@ -258,6 +272,14 @@ class OrderController extends Controller
             }
 
             DB::commit();
+
+            // Registrar cobro en audit trail con más detalle
+            $amount = isset($totalParcial) ? $totalParcial : $order->total;
+            AuditLog::record('order_paid', null, 'order', $order->id, [
+                'amount'     => round($amount, 2),
+                'is_partial' => !empty($detailIds),
+                'message'    => $message,
+            ]);
 
             return response()->json(['message' => $message, 'order' => $order]);
 

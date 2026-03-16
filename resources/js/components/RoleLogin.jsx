@@ -8,23 +8,31 @@ const RoleLogin = ({ roleName, roleLabel, onLogin }) => {
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
+    const [initialCheck, setInitialCheck] = useState(true); // Para evitar el parpadeo del formulario
+    const [shiftActive, setShiftActive] = useState(false);
     const navigate = useNavigate();
 
     useEffect(() => {
-        const fetchRoleUsers = async () => {
+        const fetchData = async () => {
             try {
-                const { data } = await axios.get('/api/users');
-                // Filtramos solo los usuarios que coincidan con el rol de la vista solicitada
-                setUsers(data.filter(u => u.role === roleName));
+                const [usersRes, shiftRes] = await Promise.all([
+                    axios.get('/api/users'),
+                    axios.get('/api/shifts/current')
+                ]);
+                setUsers(usersRes.data.filter(u => u.role === roleName));
+                setShiftActive(!!shiftRes.data);
             } catch (err) {
-                console.error("Error cargando usuarios", err);
+                console.error("Error cargando datos de login", err);
+            } finally {
+                setInitialCheck(false);
             }
         };
-        fetchRoleUsers();
+        fetchData();
     }, [roleName]);
 
     const handleLogin = async (e) => {
         e.preventDefault();
+        if (loading) return;
         setError('');
 
         if (!selectedUserId || !password) {
@@ -64,52 +72,74 @@ const RoleLogin = ({ roleName, roleLabel, onLogin }) => {
                 </div>
 
                 <h2 className="text-2xl font-bold text-slate-800 mb-2">Acceso a {roleLabel}</h2>
-                <p className="text-sm text-slate-500 mb-8">Selecciona tu perfil e ingresa tu PIN para comenzar tu turno.</p>
 
-                <form onSubmit={handleLogin} className="space-y-4">
-                    {error && <div className="p-3 bg-red-50 text-red-600 rounded-lg text-sm">{error}</div>}
-
-                    <div className="text-left">
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Nombre</label>
-                        <select
-                            className="w-full border-slate-200 rounded-lg focus:ring-blue-500 focus:border-blue-500"
-                            value={selectedUserId}
-                            onChange={(e) => setSelectedUserId(e.target.value)}
+                {initialCheck ? (
+                    <div className="py-10 flex flex-col items-center">
+                        <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+                        <p className="text-sm text-slate-500 font-bold animate-pulse">Verificando estado del sistema...</p>
+                    </div>
+                ) : (!shiftActive && (roleName === 'mesero' || roleName === 'cocinero')) ? (
+                    <div className="mt-4 p-4 bg-rose-50 border border-rose-100 rounded-xl text-rose-700">
+                        <div className="text-3xl mb-2">🔒</div>
+                        <p className="font-bold text-sm">JORNADA CERRADA</p>
+                        <p className="text-xs mt-1">No puedes iniciar turno hasta que Caja abra el día.</p>
+                        <button
+                            onClick={() => navigate('/')}
+                            className="mt-4 w-full bg-rose-600 text-white font-bold py-2 rounded-lg text-xs"
                         >
-                            <option value="">Selecciona tu nombre...</option>
-                            {users.map(u => (
-                                <option key={u.id} value={u.id}>{u.name}</option>
-                            ))}
-                        </select>
+                            Regresar
+                        </button>
                     </div>
+                ) : (
+                    <>
+                        <p className="text-sm text-slate-500 mb-8">Selecciona tu perfil e ingresa tu PIN para comenzar tu turno.</p>
 
-                    <div className="text-left">
-                        <label className="block text-sm font-medium text-slate-700 mb-1">PIN / Contraseña</label>
-                        <input
-                            type="password"
-                            className="w-full border-slate-200 rounded-lg text-center tracking-[0.5em] focus:ring-blue-500 focus:border-blue-500"
-                            placeholder="****"
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                        />
-                    </div>
+                        <form onSubmit={handleLogin} className="space-y-4">
+                            {error && <div className="p-3 bg-red-50 text-red-600 rounded-lg text-sm">{error}</div>}
 
-                    <button
-                        type="submit"
-                        disabled={loading}
-                        className="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-xl hover:bg-blue-700 focus:ring-4 focus:ring-blue-200 transition-all active:scale-95 disabled:opacity-50 mt-4"
-                    >
-                        {loading ? 'Verificando...' : 'Iniciar Turno'}
-                    </button>
+                            <div className="text-left">
+                                <label className="block text-sm font-medium text-slate-700 mb-1">Nombre</label>
+                                <select
+                                    className="w-full border-slate-200 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                                    value={selectedUserId}
+                                    onChange={(e) => setSelectedUserId(e.target.value)}
+                                >
+                                    <option value="">Selecciona tu nombre...</option>
+                                    {users.map(u => (
+                                        <option key={u.id} value={u.id}>{u.name}</option>
+                                    ))}
+                                </select>
+                            </div>
 
-                    <button
-                        type="button"
-                        onClick={() => navigate('/')}
-                        className="w-full text-slate-500 text-sm font-medium py-2 hover:text-slate-800"
-                    >
-                        Volver al Menú Principal
-                    </button>
-                </form>
+                            <div className="text-left">
+                                <label className="block text-sm font-medium text-slate-700 mb-1">PIN / Contraseña</label>
+                                <input
+                                    type="password"
+                                    className="w-full border-slate-200 rounded-lg text-center tracking-[0.5em] focus:ring-blue-500 focus:border-blue-500"
+                                    placeholder="****"
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                />
+                            </div>
+
+                            <button
+                                type="submit"
+                                disabled={loading}
+                                className="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-xl hover:bg-blue-700 focus:ring-4 focus:ring-blue-200 transition-all active:scale-95 disabled:opacity-50 mt-4"
+                            >
+                                {loading ? 'Verificando...' : 'Iniciar Turno'}
+                            </button>
+
+                            <button
+                                type="button"
+                                onClick={() => navigate('/')}
+                                className="w-full text-slate-500 text-sm font-medium py-2 hover:text-slate-800"
+                            >
+                                Volver al Menú Principal
+                            </button>
+                        </form>
+                    </>
+                )}
             </div>
         </div>
     );

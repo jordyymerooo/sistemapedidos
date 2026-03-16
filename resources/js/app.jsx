@@ -11,8 +11,8 @@ import AdminView from './components/AdminView';
 import WaiterView from './components/WaiterView';
 import RoleLogin from './components/RoleLogin';
 import CashierView from './components/CashierView';
-
 import WaiterDashboard from './components/WaiterDashboard';
+import TableCallPage from './components/TableCallPage';
 
 const AppRouter = () => {
     // Estados de sesión independientes
@@ -58,6 +58,9 @@ const AppRouter = () => {
                         ? <RoleLogin roleName="admin" roleLabel="Administración" onLogin={setActiveAdmin} />
                         : <AdminView activeAdmin={activeAdmin} onLogout={() => setActiveAdmin(null)} />
                 } />
+
+                {/* RUTA TABLET DE MESA (pública, sin login) */}
+                <Route path="/mesa/:tableId" element={<TableCallPage />} />
             </Routes>
         </BrowserRouter>
     );

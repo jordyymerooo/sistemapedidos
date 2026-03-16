@@ -15,6 +15,8 @@ const WaiterView = ({ activeWaiter, onLogout }) => {
     const [cart, setCart] = useState([]);
     const [readyOrders, setReadyOrders] = useState([]); // Comandas en barra esperando
     const [loading, setLoading] = useState(true);
+    const [shiftActive, setShiftActive] = useState(true); // Bloqueo por jornada
+    const [isSubmitting, setIsSubmitting] = useState(false); // Previene doble envío
     const [showCleaningModal, setShowCleaningModal] = useState(false);
     const [showReadyModal, setShowReadyModal] = useState(false); // Modal comandas
 
@@ -31,26 +33,46 @@ const WaiterView = ({ activeWaiter, onLogout }) => {
 
     useEffect(() => {
         fetchData();
-        const intervalId = setInterval(fetchData, 10000); // Polling por si el estado de mesas cambia
+        const intervalId = setInterval(fetchData, 5000); // Polling por si el estado de mesas cambia
         return () => clearInterval(intervalId);
     }, []);
 
     const fetchData = async () => {
         try {
-            const [tablesRes, productsRes, categoriesRes, readyRes] = await Promise.all([
+            const [tablesRes, productsRes, categoriesRes, readyRes, shiftRes] = await Promise.all([
                 axios.get('/api/tables'),
                 axios.get('/api/products'),
                 axios.get('/api/categories'),
-                axios.get('/api/orders/ready')
+                axios.get('/api/orders/ready'),
+                axios.get('/api/shifts/current')
             ]);
             setTables(tablesRes.data);
             if (products.length === 0) setProducts(productsRes.data);
             if (categories.length === 0) setCategories(categoriesRes.data);
-            setReadyOrders(readyRes.data);
+            setShiftActive(!!shiftRes.data);
+
+            // Ocultar órdenes ya marcadas como leídas localmente
+            const dismissed = JSON.parse(localStorage.getItem('dismissedOrders') || '[]');
+            setReadyOrders(readyRes.data.filter(o => !dismissed.includes(o.id)));
+
             setLoading(false);
         } catch (error) {
             console.error("Error fetching data", error);
             setLoading(false);
+        }
+    };
+
+    const handleDismissOrder = (orderId) => {
+        const dismissed = JSON.parse(localStorage.getItem('dismissedOrders') || '[]');
+        if (!dismissed.includes(orderId)) {
+            dismissed.push(orderId);
+            localStorage.setItem('dismissedOrders', JSON.stringify(dismissed));
+        }
+        setReadyOrders(prev => prev.filter(o => o.id !== orderId));
+
+        // Ocultar modal si ya no quedan notificaciones
+        if (readyOrders.length <= 1 && dirtyTables.length === 0) {
+            setShowCleaningModal(false);
         }
     };
 
@@ -92,10 +114,12 @@ const WaiterView = ({ activeWaiter, onLogout }) => {
     });
 
     const submitOrder = async () => {
-        if (!selectedTable || cart.length === 0) {
+        if (!selectedTable || cart.length === 0 || isSubmitting) {
             alert("Debe seleccionar una mesa y tener productos en el carrito.");
             return;
         }
+
+        setIsSubmitting(true);
 
         try {
             await axios.post('/api/orders', {
@@ -109,30 +133,39 @@ const WaiterView = ({ activeWaiter, onLogout }) => {
         } catch (error) {
             console.error("Error submitting order", error);
             alert("Ocurrió un error al enviar el pedido.");
+            setIsSubmitting(false); // Solo destrabar si falla. Si sale bien, el navigate destruye el componente.
         }
     };
 
     const handleCleanTable = async (tableId) => {
+        if (isSubmitting) return;
+        setIsSubmitting(true);
         try {
             await axios.patch(`/api/tables/${tableId}`, { needs_cleaning: false });
-            fetchData(); // Refresca para quitar de la lista sucia
+            await fetchData(); // Refresca para quitar de la lista sucia
             // Si era la última por limpiar, cerramos modal solitos
             const remainingDirty = dirtyTables.filter(t => t.id !== tableId);
             if (remainingDirty.length === 0) setShowCleaningModal(false);
         } catch (error) {
             console.error("Error marcando la mesa como limpia", error);
             alert("No se pudo marcar la mesa como limpia");
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
     const handleDeliverOrder = async (orderId) => {
+        if (isSubmitting) return;
+        setIsSubmitting(true);
         try {
             await axios.patch(`/api/orders/${orderId}/deliver`);
-            fetchData();
+            await fetchData();
             const remainingReady = readyOrders.filter(o => o.id !== orderId);
             if (remainingReady.length === 0) setShowReadyModal(false);
         } catch (error) {
             console.error("Error despachando orden a la mesa", error);
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
@@ -140,6 +173,27 @@ const WaiterView = ({ activeWaiter, onLogout }) => {
 
     if (loading && products.length === 0) {
         return <div className="flex h-screen items-center justify-center font-bold text-slate-400">Cargando Menú...</div>;
+    }
+
+    if (!shiftActive) {
+        return (
+            <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-6 text-center">
+                <div className="bg-white/10 backdrop-blur-xl p-10 rounded-[3rem] border border-white/20 shadow-2xl max-w-sm">
+                    <div className="text-6xl mb-6">🔒</div>
+                    <h2 className="text-3xl font-black text-white mb-4">SISTEMA CERRADO</h2>
+                    <p className="text-slate-300 font-medium mb-8">
+                        La jornada laboral no ha iniciado. No puedes tomar pedidos hasta que Caja abra el día.
+                    </p>
+                    <div className="inline-flex items-center gap-2 text-amber-400 font-bold bg-amber-400/10 px-4 py-2 rounded-full border border-amber-400/20">
+                        <span className="relative flex h-3 w-3">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-3 w-3 bg-amber-500"></span>
+                        </span>
+                        Esperando apertura...
+                    </div>
+                </div>
+            </div>
+        );
     }
 
     return (
@@ -154,28 +208,16 @@ const WaiterView = ({ activeWaiter, onLogout }) => {
                         </p>
                     </div>
                     <div className="flex w-full md:w-auto items-center gap-3">
-                        {/* Botón Comandas en Barra */}
+                        {/* Botón de Notificaciones Unificadas (Mesas Sucias + Comandas Listas) */}
                         <button
-                            onClick={() => readyOrders.length > 0 && setShowReadyModal(true)}
+                            onClick={() => (dirtyTables.length > 0 || readyOrders.length > 0) && setShowCleaningModal(true)}
                             className={`relative flex items-center justify-center h-10 w-10 text-slate-600 focus:outline-none transition-colors ${readyOrders.length > 0 ? 'text-blue-600 hover:text-blue-800 animate-bounce' : 'hover:text-amber-600'}`}
-                            title="Comandas Listas"
-                        >
-                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 15.546c-.523 0-1.046.151-1.5.454a2.704 2.704 0 01-3 0 2.704 2.704 0 00-3 0 2.704 2.704 0 01-3 0 2.704 2.704 0 00-3 0 2.704 2.704 0 01-3 0 2.701 2.701 0 00-1.5-.454M9 6v2m3-2v2m3-2v2M9 3h.01M12 3h.01M15 3h.01M21 21v-7a2 2 0 00-2-2H5a2 2 0 00-2 2v7h18zm-3-9v-2a2 2 0 00-2-2H8a2 2 0 00-2 2v2h12z"></path></svg>
-                            {readyOrders.length > 0 && (
-                                <span className="absolute -top-1 -right-1 flex items-center justify-center h-5 w-5 rounded-full bg-blue-500 text-white text-[10px] font-bold ring-2 ring-white">
-                                    {readyOrders.length}
-                                </span>
-                            )}
-                        </button>
-
-                        <button
-                            onClick={() => dirtyTables.length > 0 && setShowCleaningModal(true)}
-                            className="relative flex items-center justify-center h-10 w-10 text-slate-600 hover:text-amber-600 focus:outline-none transition-colors"
+                            title="Notificaciones"
                         >
                             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path></svg>
-                            {dirtyTables.length > 0 && (
-                                <span className="absolute top-0 right-0 flex items-center justify-center h-5 w-5 rounded-full bg-rose-500 text-white text-[10px] font-bold ring-2 ring-white">
-                                    {dirtyTables.length}
+                            {(dirtyTables.length > 0 || readyOrders.length > 0) && (
+                                <span className="absolute -top-1 -right-1 flex items-center justify-center h-5 w-5 rounded-full bg-rose-500 text-white text-[10px] font-bold ring-2 ring-white">
+                                    {dirtyTables.length + readyOrders.length}
                                 </span>
                             )}
                         </button>
@@ -191,7 +233,7 @@ const WaiterView = ({ activeWaiter, onLogout }) => {
                     </div>
                 </header>
 
-                {/* MODAL CAMPANITA */}
+                {/* MODAL CAMPANITA (UNIFICADO) */}
                 {showCleaningModal && (
                     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm">
                         <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm flex flex-col p-6 relative">
@@ -202,28 +244,62 @@ const WaiterView = ({ activeWaiter, onLogout }) => {
                                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
                             </button>
                             <h2 className="text-xl font-black text-slate-800 mb-2 flex items-center gap-2">
-                                <span className="text-2xl">🧹</span> Tareas de Limpieza
+                                <span className="text-2xl">🔔</span> Notificaciones
                             </h2>
                             <p className="text-sm text-slate-500 mb-6 font-medium border-b border-slate-100 pb-4">
-                                Las siguientes mesas han sido liberadas por caja y requieren limpieza para recibir a nuevos clientes.
+                                Alertas y novedades en el local.
                             </p>
 
-                            <ul className="space-y-3 mb-6 max-h-60 overflow-y-auto">
-                                {dirtyTables.map(table => (
-                                    <li key={table.id} className="flex items-center justify-between p-3 rounded-xl border border-rose-100 bg-rose-50/50">
-                                        <div className="flex flex-col">
-                                            <span className="font-bold text-slate-800">Mesa {table.number}</span>
-                                            <span className="text-[10px] font-semibold text-rose-500 uppercase tracking-widest">Sucia</span>
-                                        </div>
-                                        <button
-                                            onClick={() => handleCleanTable(table.id)}
-                                            className="px-4 py-2 bg-rose-500 hover:bg-rose-600 text-white font-bold text-xs rounded-lg shadow shadow-rose-200 transition-all"
-                                        >
-                                            Ya Limpié ✓
-                                        </button>
-                                    </li>
-                                ))}
-                            </ul>
+                            <div className="space-y-4 mb-6 max-h-[60vh] overflow-y-auto">
+                                {/* SECCIÓN COMANDAS RECIENTES */}
+                                {readyOrders.length > 0 && (
+                                    <div className="space-y-2">
+                                        <h3 className="text-xs font-black text-blue-600 uppercase tracking-wider mb-2">Comandas Listas (Desaparecen solas)</h3>
+                                        {readyOrders.map(order => (
+                                            <div key={order.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-xl border border-blue-200 bg-blue-50 gap-3">
+                                                <div className="flex items-center gap-3">
+                                                    <span className="text-2xl">🏃‍♂️💨</span>
+                                                    <div className="flex flex-col">
+                                                        <span className="font-bold text-blue-900">Mesa {order.table?.number}</span>
+                                                        <span className="text-[10px] font-semibold text-blue-600 uppercase tracking-widest">Lista en barra</span>
+                                                    </div>
+                                                </div>
+                                                <button
+                                                    onClick={() => handleDismissOrder(order.id)}
+                                                    disabled={isSubmitting}
+                                                    className={`px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white font-bold text-xs rounded-lg shadow shadow-blue-200 transition-all whitespace-nowrap ${isSubmitting ? 'opacity-50' : ''}`}
+                                                >
+                                                    Entendido ✓
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+
+                                {/* SECCIÓN MESAS SUCIAS */}
+                                {dirtyTables.length > 0 && (
+                                    <div className="space-y-2">
+                                        <h3 className="text-xs font-black text-amber-600 uppercase tracking-wider mb-2 mt-4">Mesas por Limpiar</h3>
+                                        <ul className="space-y-2">
+                                            {dirtyTables.map(table => (
+                                                <li key={table.id} className="flex items-center justify-between p-3 rounded-xl border border-amber-200 bg-amber-50">
+                                                    <div className="flex flex-col">
+                                                        <span className="font-bold text-amber-900">Mesa {table.number}</span>
+                                                        <span className="text-[10px] font-semibold text-amber-600 uppercase tracking-widest">Sucia</span>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => handleCleanTable(table.id)}
+                                                        disabled={isSubmitting}
+                                                        className={`px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs rounded-lg shadow shadow-amber-200 transition-all ${isSubmitting ? 'opacity-50' : ''}`}
+                                                    >
+                                                        {isSubmitting ? '...' : 'Ya Limpié ✓'}
+                                                    </button>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                )}
+                            </div>
 
                             <button onClick={() => setShowCleaningModal(false)} className="w-full text-center text-sm font-bold text-slate-600 hover:text-slate-800 py-3 rounded-xl bg-slate-100 transition-colors">
                                 Cerrar Ventana
@@ -232,56 +308,7 @@ const WaiterView = ({ activeWaiter, onLogout }) => {
                     </div>
                 )}
 
-                {/* MODAL COMANDAS EN BARRA (LISTAS PARA SERVIR) */}
-                {showReadyModal && (
-                    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm">
-                        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md flex flex-col p-6 relative">
-                            <button
-                                onClick={() => setShowReadyModal(false)}
-                                className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"
-                            >
-                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-                            </button>
-                            <h2 className="text-xl font-black text-slate-800 mb-2 flex items-center gap-2">
-                                <span className="text-2xl">🏃‍♂️💨</span> Entregas Pendientes
-                            </h2>
-                            <p className="text-sm text-slate-500 mb-4 font-medium border-b border-slate-100 pb-4">
-                                Busca estas bandejas en la barra de cocina y llévalas a la mesa.
-                            </p>
 
-                            <div className="space-y-4 mb-6 max-h-[60vh] overflow-y-auto pr-1">
-                                {readyOrders.map(order => (
-                                    <div key={order.id} className="border border-blue-100 bg-blue-50/50 rounded-xl overflow-hidden flex flex-col">
-                                        <div className="bg-blue-600 text-white px-4 py-2 flex justify-between items-center text-sm font-bold">
-                                            <span>Mesa {order.table?.number}</span>
-                                            <span className="text-xs bg-white text-blue-600 px-2 py-0.5 rounded-full shadow-inner">{order.details?.length || 0} Platos</span>
-                                        </div>
-                                        <div className="p-3">
-                                            <ul className="text-sm text-slate-700 font-semibold mb-3 space-y-1">
-                                                {order.details?.map(detail => (
-                                                    <li key={detail.id} className="flex justify-between border-b border-blue-100/50 pb-1">
-                                                        <span>- {detail.product?.name}</span>
-                                                        <span className="text-blue-500">x{detail.quantity}</span>
-                                                    </li>
-                                                ))}
-                                            </ul>
-                                            <button
-                                                onClick={() => handleDeliverOrder(order.id)}
-                                                className="w-full px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-black text-xs md:text-sm rounded-lg shadow shadow-blue-200 transition-all uppercase tracking-wider"
-                                            >
-                                                Lo llevé a la mesa ✓
-                                            </button>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-
-                            <button onClick={() => setShowReadyModal(false)} className="w-full text-center text-sm font-bold text-slate-600 hover:text-slate-800 py-3 rounded-xl bg-slate-100 transition-colors mt-auto">
-                                Ocultar
-                            </button>
-                        </div>
-                    </div>
-                )}
 
                 {/* Filtros de Requerimientos (Buscador y Categorías) */}
                 <div className="mb-6 space-y-4">
@@ -398,9 +425,10 @@ const WaiterView = ({ activeWaiter, onLogout }) => {
                     </div>
                     <button
                         onClick={submitOrder}
-                        disabled={cart.length === 0 || !selectedTable}
-                        className="w-full bg-blue-600 text-white font-bold py-3 md:py-4 rounded-xl shadow-lg shadow-blue-200 hover:bg-blue-700 hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm md:text-base">
-                        Enviar a Cocina
+                        disabled={cart.length === 0 || !selectedTable || isSubmitting}
+                        className={`w-full text-white font-bold py-3 md:py-4 rounded-xl shadow-lg transition-all text-sm md:text-base 
+                                   ${isSubmitting ? 'bg-slate-400 cursor-wait shadow-none' : 'bg-blue-600 shadow-blue-200 hover:bg-blue-700 hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed'}`}>
+                        {isSubmitting ? 'Enviando...' : 'Enviar a Cocina'}
                     </button>
                 </div>
             </div>

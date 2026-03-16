@@ -1,0 +1,29 @@
+=============================================================
+ GUIA DEFINITIVA: COMO LLEVAR EL SISTEMA EN UN USB (PENDRIVE)
+=============================================================
+
+El sistema ha sido desconectado de instalaciones pesadas de tu computadora. 
+Tu base de datos ahora es un archivo minúsculo llamado "database.sqlite" que viaja adentro de tu proyecto, con tus menús y usuarios base ("admin@restaurante.com", etc) listos para usar.
+
+Para usar este sistema en CUALQUIER OTRA COMPUTADORA CON WINDOWS usando un USB:
+
+PASO 1: DESCARGA EL MOTOR PORTABLE
+-------------------------------------------------------------
+Como la otra PC no tendrá instalado el lenguaje web (PHP), necesitamos un "micro-servidor" portable de Windows.
+1. Entra a Google y busca "Laragon Portable" (o entra a https://laragon.org/download)
+2. Descarga la version "Laragon Portable" (Pesa unos 25 MB).
+3. Mete Laragon dentro de tu Pendrive USB y extraelo/instalalo en una carpeta llamada "Servidor_Restaurante" dentro de tu USB.
+
+PASO 2: METE TU SISTEMA DE PEDIDOS AL USB
+-------------------------------------------------------------
+1. Copia toda esta carpeta de tu computadora: "C:\Users\JORDY\Documents\TRABAJOSSS PAGOS\SISTEMA PEDIDOS"
+2. Pégala dentro de tu USB en la ruta: "USB:\Servidor_Restaurante\www" (reemplaza USB por la letra de tu pendrive).
+
+PASO 3: ENCIENDE LA CAJA REGISTRADORA (EN LA NUEVA PC)
+-------------------------------------------------------------
+1. Conecta tu USB en la nueva computadora de tu restaurante.
+2. Abre la carpeta del USB, entra a "Servidor_Restaurante" y dale doble clic al ícono azul "laragon.exe". 
+3. Presiona el boton "Start All" o "Iniciar" en la ventana de Laragon.
+4. Entra a tu carpeta del sistema ("SISTEMA PEDIDOS") y dale Doble Clic al archivo negro que creamos antes: "Iniciar_Sistema.bat"
+
+¡LISTO! La nueva computadora lanzará el sistema al instante, tus meseros podrán conectarse al WiFi de ese lugar, y cuando acabe el turno, desconectas el USB, apagas todo y te llevas tus datos en el bolsillo.

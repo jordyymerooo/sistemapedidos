@@ -9,23 +9,32 @@ const HomeSelection = () => {
         orders_pending: 0,
         orders_served: 0
     });
+    const [initialCheck, setInitialCheck] = useState(true);
+    const [shiftActive, setShiftActive] = useState(false);
 
     useEffect(() => {
-        const fetchMetrics = async () => {
+        const fetchData = async () => {
             try {
-                const { data } = await axios.get('/api/metrics');
+                const [metricsRes, shiftRes] = await Promise.all([
+                    axios.get('/api/metrics'),
+                    axios.get('/api/shifts/current')
+                ]);
+                const data = metricsRes.data;
                 setMetrics({
                     tables_free: data.tables?.free || 0,
                     tables_occupied: data.tables?.occupied || 0,
                     orders_pending: data.orders?.pending || 0,
                     orders_served: data.orders?.served || 0
                 });
+                setShiftActive(!!shiftRes.data);
             } catch (error) {
-                console.error("Error fetching home metrics", error);
+                console.error("Error fetching home data", error);
+            } finally {
+                setInitialCheck(false);
             }
         };
-        fetchMetrics();
-        const intervalId = setInterval(fetchMetrics, 10000);
+        fetchData();
+        const intervalId = setInterval(fetchData, 10000);
         return () => clearInterval(intervalId);
     }, []);
 
@@ -40,12 +49,29 @@ const HomeSelection = () => {
         <div className="min-h-screen bg-slate-50 flex flex-col items-center py-8 md:py-12 px-4 sm:px-6 lg:px-8">
             <div className="max-w-md w-full mb-8 text-center">
                 <span className="text-xs font-bold text-slate-500 tracking-widest uppercase">{getGreeting()}</span>
-                <h1 className="text-3xl md:text-4xl font-black text-slate-800 tracking-tight mt-1 mb-2">
-                    ¿Qué módulo necesitas?
-                </h1>
-                <p className="text-sm text-slate-500 font-medium">
-                    Selecciona tu área para acceder a los módulos
-                </p>
+                {initialCheck ? (
+                    // Pantalla de carga neutral: no muestra estado de jornada hasta saber la respuesta real
+                    <div className="mt-4 flex flex-col items-center">
+                        <div className="w-8 h-8 border-4 border-slate-300 border-t-slate-600 rounded-full animate-spin mb-3"></div>
+                        <p className="text-sm text-slate-400 font-semibold animate-pulse">Verificando sistema...</p>
+                    </div>
+                ) : (
+                    <>
+                        <h1 className="text-3xl md:text-4xl font-black text-slate-800 tracking-tight mt-1 mb-2">
+                            {shiftActive ? '¿Qué módulo necesitas?' : 'SISTEMA CERRADO'}
+                        </h1>
+                        <p className="text-sm text-slate-500 font-medium">
+                            {shiftActive
+                                ? 'Selecciona tu área para acceder a los módulos'
+                                : 'La jornada laboral aún no ha sido iniciada por Caja.'}
+                        </p>
+                        {!shiftActive && (
+                            <div className="mt-4 inline-flex items-center gap-2 text-rose-600 font-bold bg-rose-50 px-4 py-2 rounded-full border border-rose-100 animate-pulse">
+                                🔒 Acceso restringido a módulos operativos
+                            </div>
+                        )}
+                    </>
+                )}
             </div>
 
             {/* Tarjetas de Estadísticas Top */}
@@ -86,21 +112,33 @@ const HomeSelection = () => {
 
             <div className="grid grid-cols-1 gap-4 md:gap-6 sm:grid-cols-2 max-w-4xl w-full">
                 {/* Botón Mesero */}
-                <Link to="/mesero" className="group flex flex-col items-center bg-white p-8 rounded-2xl shadow-sm border border-gray-100 transition-all hover:shadow-xl hover:border-blue-200">
-                    <div className="flex h-16 w-16 items-center justify-center rounded-full bg-blue-100 text-blue-600 mb-4 group-hover:scale-110 transition-transform">
-                        <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
+                <Link to="/mesero" className={`group flex flex-col items-center p-8 rounded-2xl shadow-sm border transition-all ${!shiftActive ? 'bg-slate-50 border-slate-200 grayscale' : 'bg-white border-gray-100 hover:shadow-xl hover:border-blue-200'}`}>
+                    <div className={`flex h-16 w-16 items-center justify-center rounded-full mb-4 transition-transform ${!shiftActive ? 'bg-slate-200 text-slate-400' : 'bg-blue-100 text-blue-600 group-hover:scale-110'}`}>
+                        {shiftActive ? (
+                            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
+                        ) : (
+                            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
+                        )}
                     </div>
                     <h3 className="text-xl font-bold text-slate-800">Mesero</h3>
-                    <p className="text-sm text-gray-400 mt-2 text-center">Tomar pedidos de clientes en las mesas.</p>
+                    <p className="text-sm text-gray-400 mt-2 text-center">
+                        {shiftActive ? 'Tomar pedidos de clientes en las mesas.' : 'Módulo bloqueado temporalmente.'}
+                    </p>
                 </Link>
 
                 {/* Botón Cocina */}
-                <Link to="/cocina" className="group flex flex-col items-center bg-white p-8 rounded-2xl shadow-sm border border-gray-100 transition-all hover:shadow-xl hover:border-orange-200">
-                    <div className="flex h-16 w-16 items-center justify-center rounded-full bg-orange-100 text-orange-600 mb-4 group-hover:scale-110 transition-transform">
-                        <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 14v6m-3-3h6M6 10h2a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v2a2 2 0 002 2zm10 0h2a2 2 0 002-2V6a2 2 0 00-2-2h-2a2 2 0 00-2 2v2a2 2 0 002 2zM6 20h2a2 2 0 002-2v-2a2 2 0 00-2-2H6a2 2 0 00-2 2v2a2 2 0 002 2z"></path></svg>
+                <Link to="/cocina" className={`group flex flex-col items-center p-8 rounded-2xl shadow-sm border transition-all ${!shiftActive ? 'bg-slate-50 border-slate-200 grayscale' : 'bg-white border-gray-100 hover:shadow-xl hover:border-orange-200'}`}>
+                    <div className={`flex h-16 w-16 items-center justify-center rounded-full mb-4 transition-transform ${!shiftActive ? 'bg-slate-200 text-slate-400' : 'bg-orange-100 text-orange-600 group-hover:scale-110'}`}>
+                        {shiftActive ? (
+                            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 14v6m-3-3h6M6 10h2a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v2a2 2 0 002 2zm10 0h2a2 2 0 002-2V6a2 2 0 00-2-2h-2a2 2 0 00-2 2v2a2 2 0 002 2zM6 20h2a2 2 0 002-2v-2a2 2 0 00-2-2H6a2 2 0 00-2 2v2a2 2 0 002 2z"></path></svg>
+                        ) : (
+                            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
+                        )}
                     </div>
                     <h3 className="text-xl font-bold text-slate-800">Cocina</h3>
-                    <p className="text-sm text-gray-400 mt-2 text-center">Visualizar las comandas entrantes y prepararlas.</p>
+                    <p className="text-sm text-gray-400 mt-2 text-center">
+                        {shiftActive ? 'Visualizar las comandas entrantes y prepararlas.' : 'Módulo bloqueado temporalmente.'}
+                    </p>
                 </Link>
 
                 {/* Botón Caja */}
