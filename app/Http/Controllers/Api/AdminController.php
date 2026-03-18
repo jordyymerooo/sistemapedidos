@@ -9,6 +9,7 @@ use App\Models\Table;
 use App\Models\Product;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use App\Models\Shift;
 
 class AdminController extends Controller
 {
@@ -17,27 +18,59 @@ class AdminController extends Controller
      */
     public function metrics()
     {
-        // 1. Métricas de Mesas
+        // 1. Obtener jornada activa para filtrar
+        $currentShift = Shift::where('status', 'open')->orderBy('id', 'desc')->first();
+        
+        // 2. Métricas de Mesas (Estas siempre se muestran)
         $tables = Table::all();
         $totalTables = $tables->count();
         $occupiedTables = $tables->where('status', 'ocupada')->count();
         $freeTables = $tables->where('status', 'libre')->count();
 
-        // 2. Métricas de Órdenes (Globales)
-        $allOrders = Order::all();
+        // Si no hay jornada activa, los ingresos y órdenes deben estar en 0 (requerimiento de usuario)
+        if (!$currentShift) {
+            return response()->json([
+                'tables' => [
+                    'total' => $totalTables,
+                    'occupied' => $occupiedTables,
+                    'free' => $freeTables,
+                    'data' => $tables
+                ],
+                'orders' => [
+                    'total_today' => 0,
+                    'pending' => 0,
+                    'served' => 0,
+                    'paid' => 0
+                ],
+                'revenue' => [
+                    'today' => 0
+                ],
+                'top_products' => []
+            ]);
+        }
+
+        // 3. Filtrar órdenes por el rango de la jornada laboral actual
+        $startTime = $currentShift->start_time;
+        // Si sigue abierta, usamos 'now' como límite superior
+        $endTime = now()->toDateTimeString();
+
+        $shiftOrders = Order::whereBetween('created_at', [$startTime, $endTime])->get();
         
-        $totalOrders = $allOrders->count();
-        $pendingOrders = $allOrders->whereIn('status', ['pendiente', 'en_preparacion'])->count();
-        $servedOrders = $allOrders->where('status', 'servido')->count();
-        $paidOrders = $allOrders->where('status', 'pagado')->count();
+        $totalOrders = $shiftOrders->count();
+        $pendingOrders = $shiftOrders->whereIn('status', ['pendiente', 'en_preparacion'])->count();
+        $servedOrders = $shiftOrders->where('status', 'servido')->count();
+        $paidOrders = $shiftOrders->where('status', 'pagado')->count();
 
-        // 3. Ingresos (Suma del total de órdenes pagadas)
-        $totalRevenue = $allOrders->where('status', 'pagado')->sum('total');
+        // 4. Ingresos (Suma del total de órdenes pagadas durante la jornada)
+        $totalRevenue = Order::where('status', 'pagado')
+            ->whereBetween('updated_at', [$startTime, $endTime])
+            ->sum('total');
 
-        // 4. Top 5 Productos más vendidos globalmente
+        // 5. Top 5 Productos más vendidos en esta jornada
         $topProducts = OrderDetail::select('product_id', DB::raw('SUM(quantity) as total_quantity'))
-            ->whereHas('order', function ($query) {
-                $query->where('status', 'pagado');
+            ->whereHas('order', function ($query) use ($startTime, $endTime) {
+                $query->where('status', 'pagado')
+                      ->whereBetween('updated_at', [$startTime, $endTime]);
             })
             ->with('product:id,name,price')
             ->groupBy('product_id')
@@ -50,7 +83,7 @@ class AdminController extends Controller
                 'total' => $totalTables,
                 'occupied' => $occupiedTables,
                 'free' => $freeTables,
-                'data' => $tables // Por si queremos dibujar un mapa de mesas
+                'data' => $tables
             ],
             'orders' => [
                 'total_today' => $totalOrders,

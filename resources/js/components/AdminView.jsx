@@ -11,14 +11,20 @@ const AdminView = ({ onLogout }) => {
     const [orders, setOrders] = useState([]);
     const [products, setProducts] = useState([]);
     const [categories, setCategories] = useState([]);
+    const [locations, setLocations] = useState([]);
     const [shifts, setShifts] = useState([]);
     const [auditLogs, setAuditLogs] = useState([]);
     const [alerts, setAlerts] = useState({ count: 0, alerts: [] });
     const [loading, setLoading] = useState(true);
     const [processing, setProcessing] = useState(false);
+    const [currentTime, setCurrentTime] = useState(new Date());
+    const [selectedShiftSummary, setSelectedShiftSummary] = useState(null);
+    const [showShiftReportModal, setShowShiftReportModal] = useState(false);
 
     // Form States
     const [newTableNum, setNewTableNum] = useState('');
+    const [selectedLocationId, setSelectedLocationId] = useState('');
+    const [newLocationName, setNewLocationName] = useState('');
     const [newUser, setNewUser] = useState({ name: '', email: '', password: '', role: 'mesero' });
     const [newProduct, setNewProduct] = useState({ name: '', price: '', stock: 0, category_id: '' });
     const [editingProduct, setEditingProduct] = useState(null);
@@ -28,12 +34,24 @@ const AdminView = ({ onLogout }) => {
         fetchData();
     }, [activeTab]);
 
+    useEffect(() => {
+        const clockId = setInterval(() => setCurrentTime(new Date()), 1000);
+        return () => clearInterval(clockId);
+    }, []);
+
     const fetchData = async () => {
         setLoading(true);
         try {
             if (activeTab === 'tables') {
-                const { data } = await axios.get('/api/tables');
-                setTables(data);
+                const [tablesRes, locationsRes] = await Promise.all([
+                    axios.get('/api/tables'),
+                    axios.get('/api/locations')
+                ]);
+                setTables(tablesRes.data);
+                setLocations(locationsRes.data);
+                if (locationsRes.data.length > 0 && !selectedLocationId) {
+                    setSelectedLocationId(locationsRes.data[0].id);
+                }
             } else if (activeTab === 'personnel') {
                 const { data } = await axios.get('/api/users');
                 setUsers(data);
@@ -74,12 +92,16 @@ const AdminView = ({ onLogout }) => {
         if (processing) return;
         setProcessing(true);
         try {
-            await axios.post('/api/tables', { number: newTableNum, status: 'libre' });
+            await axios.post('/api/tables', {
+                number: newTableNum,
+                location_id: selectedLocationId,
+                status: 'libre'
+            });
             setNewTableNum('');
             fetchData();
             alert('Mesa creada exitosamente');
         } catch (error) {
-            alert('Error al crear mesa (quizás el número ya existe)');
+            alert('Error al crear mesa (quizás el nombre ya existe)');
         } finally {
             setProcessing(true);
             setProcessing(false);
@@ -217,13 +239,58 @@ const AdminView = ({ onLogout }) => {
         }
     };
 
+    const handleCreateLocation = async (e) => {
+        e.preventDefault();
+        if (processing) return;
+        setProcessing(true);
+        try {
+            await axios.post('/api/locations', { name: newLocationName });
+            setNewLocationName('');
+            fetchData();
+            alert('Área/Lugar creado exitosamente');
+        } catch (error) {
+            alert('Error al crear el lugar. Quizás ya existe.');
+        } finally {
+            setProcessing(false);
+        }
+    };
+
+    const handleDeleteLocation = async (id) => {
+        if (!confirm('¿Eliminar esta ubicación? Las mesas asociadas podrían quedar huérfanas o dar error.')) return;
+        try {
+            await axios.delete(`/api/locations/${id}`);
+            fetchData();
+        } catch (error) {
+            alert(error.response?.data?.error || 'Error al eliminar ubicación');
+        }
+    };
+
+    const handleViewShiftSummary = async (shiftId) => {
+        try {
+            const { data } = await axios.get(`/api/shifts/${shiftId}/summary`);
+            setSelectedShiftSummary(data);
+            setShowShiftReportModal(true);
+        } catch (error) {
+            alert('No se pudo cargar el resumen de la jornada');
+        }
+    };
+
 
     return (
         <div className="min-h-screen bg-slate-50 p-6 flex flex-col">
             <header className="mb-6 flex items-center justify-between">
                 <div>
                     <h1 className="text-3xl font-black text-slate-800">Panel de Administración</h1>
-                    <p className="text-sm text-slate-500 font-medium">Gestiona tu restaurante en tiempo real</p>
+                    <div className="flex items-center gap-3">
+                        <p className="text-sm text-slate-500 font-medium">Gestiona tu restaurante en tiempo real</p>
+                        <span className="text-xs font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">
+                            🇪🇨 {currentTime.toLocaleString('es-EC', {
+                                timeZone: 'America/Guayaquil',
+                                weekday: 'short', day: '2-digit', month: 'short',
+                                hour: '2-digit', minute: '2-digit', second: '2-digit'
+                            })}
+                        </span>
+                    </div>
                 </div>
                 <div className="flex items-center gap-3">
                     <Link to="/" className="text-sm font-semibold text-purple-600 hover:text-purple-800 px-4 py-2 border border-purple-200 rounded-lg bg-purple-50 hover:bg-purple-100 transition-colors">
@@ -257,34 +324,100 @@ const AdminView = ({ onLogout }) => {
 
             {/* TAB: MESAS */}
             {activeTab === 'tables' && (
-                <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
-                    <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 md:col-span-1 border-t-4 border-t-purple-500">
-                        <h3 className="text-lg font-bold text-slate-800 mb-4">Ingresar Nueva Mesa</h3>
-                        <form onSubmit={handleCreateTable} className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">Número de Mesa</label>
-                                <input type="number" required min="1" className="w-full border-slate-200 rounded-lg focus:ring-purple-500 focus:border-purple-500" value={newTableNum} onChange={(e) => setNewTableNum(e.target.value)} disabled={processing} />
+                <div className="flex-1 flex flex-col gap-6">
+                    {/* Sección Superior: Formularios */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+                        <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 border-t-4 border-t-purple-500">
+                            <h3 className="text-lg font-bold text-slate-800 mb-4">Ingresar Nueva Mesa</h3>
+                            <form onSubmit={handleCreateTable} className="space-y-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">Número de Mesa</label>
+                                    <input type="number" required min="1" className="w-full border-slate-200 rounded-lg focus:ring-purple-500 focus:border-purple-500" value={newTableNum} onChange={(e) => setNewTableNum(e.target.value)} disabled={processing} />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">Lugar / Área <span className="text-xs font-normal text-slate-400">(Selecciona donde está)</span></label>
+                                    <select required className="w-full border-slate-200 rounded-lg focus:ring-purple-500 focus:border-purple-500" value={selectedLocationId} onChange={(e) => setSelectedLocationId(e.target.value)} disabled={processing || locations.length === 0}>
+                                        {locations.map(loc => (
+                                            <option key={loc.id} value={loc.id}>{loc.name}</option>
+                                        ))}
+                                    </select>
+                                    {locations.length === 0 && <p className="text-[10px] text-rose-500 mt-1 font-bold">⚠️ Debes crear un lugar primero al lado.</p>}
+                                </div>
+                                <button type="submit" disabled={processing || locations.length === 0} className={`w-full bg-purple-600 text-white font-bold py-3 rounded-xl hover:bg-purple-700 ${processing || locations.length === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                                    {processing ? 'Procesando...' : 'Añadir Mesa'}
+                                </button>
+                            </form>
+                        </div>
+
+                        <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 border-t-4 border-t-blue-500 flex flex-col gap-4">
+                            <h3 className="text-lg font-bold text-slate-800">Gestión de Áreas / Lugares</h3>
+                            <p className="text-xs text-slate-500 font-medium italic">Define las zonas del local (ej: Terraza, VIP, Piso 1)</p>
+                            <form onSubmit={handleCreateLocation} className="flex gap-2">
+                                <input type="text" required placeholder="Nombre del área" className="flex-1 border-slate-200 rounded-lg focus:ring-blue-500 focus:border-blue-500" value={newLocationName} onChange={(e) => setNewLocationName(e.target.value)} disabled={processing} />
+                                <button type="submit" disabled={processing} className="bg-blue-600 text-white font-bold px-4 rounded-lg hover:bg-blue-700 transition-colors">
+                                    {processing ? '...' : 'Añadir'}
+                                </button>
+                            </form>
+
+                            <div className="mt-2 border-t border-slate-100 pt-4">
+                                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 px-1">Ubicaciones Registradas</h4>
+                                <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto p-1">
+                                    {locations.length === 0 ? (
+                                        <p className="text-xs text-slate-400 italic">No hay áreas configuradas.</p>
+                                    ) : (
+                                        locations.map(loc => (
+                                            <div key={loc.id} className="bg-slate-100 border border-slate-200 text-slate-700 px-3 py-1.5 rounded-lg flex items-center gap-2 text-xs font-bold shadow-sm">
+                                                {loc.name}
+                                                <button onClick={() => handleDeleteLocation(loc.id)} className="text-slate-400 hover:text-rose-500 transition-colors">
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                                                </button>
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
                             </div>
-                            <button type="submit" disabled={processing} className={`w-full bg-purple-600 text-white font-bold py-3 rounded-xl hover:bg-purple-700 ${processing ? 'opacity-50 cursor-not-allowed' : ''}`}>
-                                {processing ? 'Procesando...' : 'Añadir Mesa'}
-                            </button>
-                        </form>
+                        </div>
                     </div>
 
-                    <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 md:col-span-2">
-                        <h3 className="text-lg font-bold text-slate-800 mb-4">Plano de Mesas</h3>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    {/* Sección Inferior: Plano de Mesas Full Width */}
+                    <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-100 border-t-4 border-t-emerald-500 flex flex-col h-full min-h-[500px]">
+                        <div className="flex items-center justify-between mb-8">
+                            <div>
+                                <h3 className="text-2xl font-black text-slate-800">Plano General de Mesas</h3>
+                                <p className="text-sm text-slate-400 font-medium">Total: <span className="text-emerald-500 font-bold">{tables.length} mesas</span> configuradas en el sistema</p>
+                            </div>
+                            <div className="flex gap-4 text-xs font-bold uppercase tracking-widest text-slate-400">
+                                <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-emerald-500"></span> Libres</div>
+                                <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-rose-500"></span> Ocupadas</div>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10 gap-4">
                             {tables.map(table => (
-                                <div key={table.id} className="relative bg-slate-50 p-4 border border-slate-200 rounded-xl text-center group">
-                                    <button onClick={() => handleDeleteTable(table.id)} className="absolute top-2 right-2 text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                <div key={table.id} className="relative group">
+                                    <div className={`aspect-square rounded-3xl border-2 p-4 flex flex-col items-center justify-center transition-all duration-300 shadow-sm transform hover:-translate-y-1 hover:shadow-xl
+                                        ${table.status === 'libre' ? 'bg-white border-slate-100 hover:border-emerald-200' : 'bg-rose-50 border-rose-100 shadow-rose-100/30'}`}>
+                                        <span className="text-2xl mb-1">{table.status === 'libre' ? '🪑' : '🍽️'}</span>
+                                        <span className="font-bold text-center text-xs text-slate-400 uppercase tracking-tighter mb-1">
+                                            {table.location?.name || 'Mesa'}
+                                        </span>
+                                        <span className="text-2xl font-black text-slate-800 leading-none">
+                                            #{table.number}
+                                        </span>
+                                        <div className={`mt-2 text-[8px] font-black uppercase py-0.5 px-2 rounded-full border shadow-sm ${table.status === 'libre' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-rose-50 text-rose-600 border-rose-100'}`}>
+                                            {table.status}
+                                        </div>
+                                    </div>
+                                    <button onClick={() => handleDeleteTable(table.id)} className="absolute -top-2 -right-2 bg-rose-600 text-white p-2 rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-all z-10 hover:scale-110 active:scale-90 border-2 border-white">
+                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                                     </button>
-                                    <span className="block text-2xl font-black text-slate-700 mb-2">Mesa {table.number}</span>
-                                    <span className={`inline-block px-2 py-1 rounded text-xs font-bold ${table.status === 'ocupada' ? 'bg-rose-100 text-rose-600' : 'bg-emerald-100 text-emerald-600'}`}>
-                                        {table.status.toUpperCase()}
-                                    </span>
                                 </div>
                             ))}
+                            {tables.length === 0 && (
+                                <div className="col-span-full py-20 text-center bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200">
+                                    <p className="text-slate-400 font-bold uppercase tracking-widest">No hay mesas configuradas aún.</p>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -530,6 +663,7 @@ const AdminView = ({ onLogout }) => {
                                     <th className="px-4 py-3">Hora de Inicio</th>
                                     <th className="px-4 py-3">Hora de Finalización</th>
                                     <th className="px-4 py-3">Estado</th>
+                                    <th className="px-4 py-3 text-right">Reporte</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
@@ -552,6 +686,15 @@ const AdminView = ({ onLogout }) => {
                                                     ${shift.status === 'open' ? 'bg-green-100 text-green-700 animate-pulse' : 'bg-slate-100 text-slate-700'}`}>
                                                     {shift.status === 'open' ? 'En Curso (Abierto)' : 'Finalizado'}
                                                 </span>
+                                            </td>
+                                            <td className="px-4 py-3 text-right">
+                                                <button
+                                                    onClick={() => handleViewShiftSummary(shift.id)}
+                                                    className="inline-flex items-center gap-1 text-purple-600 hover:text-purple-800 font-bold text-xs px-2 py-1.5 rounded-lg border border-purple-200 bg-purple-50 hover:bg-purple-100 transition-colors shadow-sm"
+                                                    title="Ver reporte de cierre"
+                                                >
+                                                    📊 Ver Reporte
+                                                </button>
                                             </td>
                                         </tr>
                                     ))
@@ -648,6 +791,82 @@ const AdminView = ({ onLogout }) => {
                                 </tbody>
                             </table>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* MODAL DE REPORTE DE JORNADA */}
+            {showShiftReportModal && selectedShiftSummary && (
+                <div className="fixed inset-0 z-[150] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
+                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl flex flex-col p-8 relative animate-in fade-in zoom-in duration-200">
+                        <button
+                            onClick={() => setShowShiftReportModal(false)}
+                            className="absolute top-6 right-6 text-slate-400 hover:text-slate-600 transition-colors p-2 hover:bg-slate-100 rounded-full"
+                        >
+                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                        </button>
+
+                        <div className="mb-6">
+                            <h2 className="text-3xl font-black text-slate-800 mb-2 flex items-center gap-3">
+                                <span className="bg-purple-100 p-2 rounded-xl text-2xl">📉</span>
+                                Reporte de Jornada
+                            </h2>
+                            <p className="text-slate-500 font-medium">
+                                Resumen operativo del Día: <span className="text-slate-900 font-bold">{new Date(selectedShiftSummary.shift.start_time).toLocaleDateString()}</span>
+                            </p>
+                        </div>
+
+                        {/* Indicadores Clave */}
+                        <div className="grid grid-cols-3 gap-4 mb-8">
+                            <div className="bg-emerald-50 border border-emerald-100 p-5 rounded-2xl">
+                                <span className="block text-xs font-bold text-emerald-600 uppercase tracking-wider mb-1">Ventas Totales</span>
+                                <span className="text-2xl font-black text-emerald-700">${selectedShiftSummary.total_revenue.toFixed(2)}</span>
+                            </div>
+                            <div className="bg-blue-50 border border-blue-100 p-5 rounded-2xl">
+                                <span className="block text-xs font-bold text-blue-600 uppercase tracking-wider mb-1">Órdenes Pagadas</span>
+                                <span className="text-2xl font-black text-blue-700">{selectedShiftSummary.total_orders}</span>
+                            </div>
+                            <div className="bg-purple-50 border border-purple-100 p-5 rounded-2xl">
+                                <span className="block text-xs font-bold text-purple-600 uppercase tracking-wider mb-1">Mesas Atendidas</span>
+                                <span className="text-2xl font-black text-purple-700">{selectedShiftSummary.tables_served}</span>
+                            </div>
+                        </div>
+
+                        {/* Top Productos */}
+                        <div className="flex-1 overflow-hidden flex flex-col mb-8">
+                            <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4">Productos más vendidos</h3>
+                            <div className="bg-slate-50 rounded-2xl border border-slate-100 overflow-hidden">
+                                <table className="w-full text-sm">
+                                    <thead className="bg-slate-100/50">
+                                        <tr>
+                                            <th className="px-4 py-2 text-left font-bold text-slate-600">Nombre del Producto</th>
+                                            <th className="px-4 py-2 text-center font-bold text-slate-600">Cant.</th>
+                                            <th className="px-4 py-2 text-right font-bold text-slate-600">Subtotal</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                        {selectedShiftSummary.top_products.length === 0 ? (
+                                            <tr><td colSpan="3" className="text-center py-6 text-slate-400">No hay ventas registradas en esta jornada.</td></tr>
+                                        ) : (
+                                            selectedShiftSummary.top_products.map((item, idx) => (
+                                                <tr key={idx} className="hover:bg-white transition-colors">
+                                                    <td className="px-4 py-2.5 font-semibold text-slate-700">{item.name}</td>
+                                                    <td className="px-4 py-2.5 text-center font-bold text-slate-500">{item.quantity}</td>
+                                                    <td className="px-4 py-2.5 text-right font-black text-slate-800">${parseFloat(item.revenue).toFixed(2)}</td>
+                                                </tr>
+                                            ))
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <button
+                            onClick={() => setShowShiftReportModal(false)}
+                            className="bg-slate-800 hover:bg-slate-900 text-white font-black py-4 rounded-2xl transition-all shadow-lg shadow-slate-200"
+                        >
+                            Cerrar Reporte
+                        </button>
                     </div>
                 </div>
             )}

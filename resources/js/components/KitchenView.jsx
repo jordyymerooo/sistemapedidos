@@ -165,7 +165,17 @@ const KitchenView = ({ onLogout }) => {
                                         <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-sm ${isLate ? 'bg-rose-500 text-white shadow-inner' : 'bg-slate-900 text-white'}`}>
                                             {order.table?.number || '?'}
                                         </div>
-                                        <h2 className="text-sm font-semibold text-slate-200">Mesa</h2>
+                                        <h2 className="text-sm font-semibold text-slate-200">
+                                            {order.table ? (
+                                                <>
+                                                    {order.table.location?.name && <span>{order.table.location.name} </span>}
+                                                    {order.table.name && <span className="text-xs text-slate-400">({order.table.name}) </span>}
+                                                    <span>Mesa {order.table.number}</span>
+                                                </>
+                                            ) : (
+                                                `Orden #${order.id}`
+                                            )}
+                                        </h2>
                                     </div>
                                     <div className={`flex items-center gap-1.5 font-bold tracking-widest ${isLate ? 'text-white' : 'text-slate-300'}`}>
                                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>

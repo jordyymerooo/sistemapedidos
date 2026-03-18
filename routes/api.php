@@ -29,7 +29,9 @@ use App\Http\Controllers\Api\UserController;
 Route::apiResource('users', UserController::class);
 
 use App\Http\Controllers\Api\TableController;
+use App\Http\Controllers\Api\LocationController;
 Route::apiResource('tables', TableController::class);
+Route::apiResource('locations', LocationController::class);
 Route::patch('/tables/{table}/call-waiter',    [TableController::class, 'callWaiter']);
 Route::patch('/tables/{table}/dismiss-waiter', [TableController::class, 'dismissWaiter']);
 

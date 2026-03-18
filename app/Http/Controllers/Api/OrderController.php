@@ -17,7 +17,7 @@ class OrderController extends Controller
      */
     public function index()
     {
-        $orders = Order::with(['details.product', 'table', 'user'])
+        $orders = Order::with(['details.product', 'table.location', 'user'])
             ->orderBy('id', 'desc')
             ->get();
 
@@ -31,7 +31,7 @@ class OrderController extends Controller
     {
         $orders = Order::with(['details' => function ($query) {
                 $query->whereIn('status', ['pendiente', 'en_preparacion'])->with('product');
-            }, 'table', 'user'])
+            }, 'table.location', 'user'])
             ->whereIn('status', ['pendiente', 'en_preparacion'])
             ->orderBy('created_at', 'asc')
             ->get();
@@ -113,7 +113,7 @@ class OrderController extends Controller
 
             return response()->json([
                 'message' => 'Pedido enviado a cocina exitosamente.',
-                'order'   => $order->load(['details.product', 'table'])
+                'order'   => $order->load(['details.product', 'table.location'])
             ], 201);
 
         } catch (\Exception $e) {
@@ -133,14 +133,14 @@ class OrderController extends Controller
             return response()->json(['error' => 'Estado de pedido no válido para esta acción'], 400);
         }
 
-        $order->details()->whereIn('status', ['pendiente', 'en_preparacion'])->update(['status' => 'servido']);
-        $order->update(['status' => 'servido']);
+        $order->details()->whereIn('status', ['pendiente', 'en_preparacion'])->update(['status' => 'listo']);
+        $order->update(['status' => 'listo']);
 
         AuditLog::record('order_ready', null, 'order', $order->id, [
             'table_id' => $order->table_id
         ]);
 
-        return response()->json(['message' => 'Pedido finalizado por cocina. Enviado a Caja.', 'order' => $order]);
+        return response()->json(['message' => 'Pedido en barra. Avisando a mesero.', 'order' => $order->load(['details.product', 'table.location'])]);
     }
 
     /**
@@ -148,10 +148,9 @@ class OrderController extends Controller
      */
     public function ready()
     {
-        // Traer órdenes recién terminadas por la cocina (status 'servido') en los últimos 3 minutos
-        $orders = Order::with(['details.product', 'table', 'user'])
-            ->where('status', 'servido')
-            ->where('updated_at', '>=', now()->subMinutes(3))
+        // Traer órdenes terminadas que aún no han sido entregadas ('listo')
+        $orders = Order::with(['details.product', 'table.location', 'user'])
+            ->where('status', 'listo')
             ->orderBy('updated_at', 'desc')
             ->get();
 
@@ -186,7 +185,7 @@ class OrderController extends Controller
     {
         // En lugar de solo 'servido', la CAJA ahora verá todas las órdenes activas
         // Esto permite cobros anticipados (Fast Food) o post-consumo, y da métricas reales.
-        $orders = Order::with(['details.product', 'table', 'user'])
+        $orders = Order::with(['details.product', 'table.location', 'user'])
             ->whereIn('status', ['pendiente', 'en_preparacion', 'listo', 'servido'])
             ->orderBy('id', 'asc') // Las más antiguas primero
             ->get();

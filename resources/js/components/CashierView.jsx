@@ -317,7 +317,11 @@ const CashierView = ({ activeCashier, onLogout }) => {
                             {callingTables.map(table => (
                                 <div key={table.id} className="flex items-center gap-3 bg-white/15 backdrop-blur border border-white/25 rounded-xl px-4 py-3">
                                     <div>
-                                        <p className="text-white font-black text-xl leading-none">Mesa {table.number}</p>
+                                        <p className="text-white font-black text-xl leading-none">
+                                            {table.location?.name && <span>{table.location.name} </span>}
+                                            {table.name && <span className="text-sm opacity-75">({table.name}) </span>}
+                                            <span>Mesa {table.number}</span>
+                                        </p>
                                         <p className="text-violet-200 text-xs font-semibold mt-0.5">Esperando mesero...</p>
                                     </div>
                                     <button
@@ -388,7 +392,7 @@ const CashierView = ({ activeCashier, onLogout }) => {
                             <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                         </div>
                         <h2 className="text-2xl font-bold text-slate-700">No hay pedidos pendientes de cobro</h2>
-                        <p className="text-slate-400 mt-2">Los pedidos aparecerán aquí cuando la cocina los marque como "Servidos".</p>
+                        <p className="text-slate-400 mt-2">Los pedidos aparecerán aquí apenas sean creados por el mesero.</p>
                     </div>
                 ) : (
                     orders.map(order => {
@@ -402,13 +406,19 @@ const CashierView = ({ activeCashier, onLogout }) => {
                                 <div className={`px-6 py-4 flex justify-between items-center text-white transition-colors duration-500 ${isLate ? 'bg-rose-600 animate-pulse' : 'bg-amber-500'}`}>
                                     <div>
                                         <div className="flex items-center gap-2">
-                                            <h3 className="font-black text-xl">Mesa {order.table?.number}</h3>
+                                            <h3 className="font-black text-xl">
+                                                {order.table?.location?.name && <span>{order.table.location.name} </span>}
+                                                {order.table?.name && <span className="text-sm opacity-75">({order.table.name}) </span>}
+                                                <span>Mesa {order.table?.number || '?'}</span>
+                                            </h3>
                                             <span className={`flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-full ${isLate ? 'bg-rose-500 text-white animate-bounce' : 'bg-amber-400/50 text-amber-50'}`}>
                                                 <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                                                 {timeText}
                                             </span>
                                         </div>
-                                        <p className={`${isLate ? 'text-rose-100' : 'text-amber-100'} text-xs font-semibold uppercase tracking-wider`}>Orden #{order.id}</p>
+                                        <p className={`${isLate ? 'text-rose-100' : 'text-amber-100'} text-xs font-semibold uppercase tracking-wider`}>
+                                            Orden #{order.id} {order.user?.name && `• Mesero: ${order.user.name}`}
+                                        </p>
                                     </div>
                                     <div className={`px-3 py-1 rounded-full text-xs font-bold uppercase backdrop-blur-sm border shadow-sm
                                         ${order.status === 'pendiente' ? 'bg-white/90 text-slate-800 border-white/50' :
@@ -416,9 +426,9 @@ const CashierView = ({ activeCashier, onLogout }) => {
                                                 order.status === 'listo' ? 'bg-blue-100/90 text-blue-800 border-blue-200' :
                                                     'bg-green-100/90 text-green-800 border-green-200'}
                                     `}>
-                                        {order.status === 'pendiente' ? 'Esperando Cocina 🕒' :
+                                        {order.status === 'pendiente' ? 'En Cocina 🕒' :
                                             order.status === 'en_preparacion' ? 'Preparando 🍳' :
-                                                order.status === 'listo' ? 'En Barra 🏃‍♂️' : 'En Mesa / Listo para Cobro'}
+                                                order.status === 'listo' ? 'En Barra 🍱' : 'En Mesa / Cobro ✓'}
                                     </div>
                                 </div>
 

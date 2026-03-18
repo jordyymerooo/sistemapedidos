@@ -4,6 +4,8 @@ import { Link, useNavigate } from 'react-router-dom';
 
 const WaiterDashboard = ({ activeWaiter, onLogout }) => {
     const [tables, setTables] = useState([]);
+    const [locations, setLocations] = useState([]);
+    const [selectedLocationId, setSelectedLocationId] = useState(null);
     const [readyOrders, setReadyOrders] = useState([]); // Comandas en barra esperando
     const [loading, setLoading] = useState(true);
     const [initialCheck, setInitialCheck] = useState(true);
@@ -29,15 +31,22 @@ const WaiterDashboard = ({ activeWaiter, onLogout }) => {
 
     const fetchDashboardData = async () => {
         try {
-            const [tablesRes, readyRes, shiftRes] = await Promise.all([
+            const [tablesRes, readyRes, shiftRes, locationsRes] = await Promise.all([
                 axios.get('/api/tables'),
                 axios.get('/api/orders/ready'),
-                axios.get('/api/shifts/current')
+                axios.get('/api/shifts/current'),
+                axios.get('/api/locations')
             ]);
 
             const fetchedTables = tablesRes.data;
+            const fetchedLocations = locationsRes.data;
             setTables(fetchedTables);
+            setLocations(fetchedLocations);
             setShiftActive(!!shiftRes.data);
+
+            if (fetchedLocations.length > 0 && !selectedLocationId) {
+                setSelectedLocationId(fetchedLocations[0].id);
+            }
 
             // --- AUTO-LIMPIEZA DE MESAS SUCIAS (7 MINUTOS) ---
             const now = Date.now();
@@ -135,7 +144,10 @@ const WaiterDashboard = ({ activeWaiter, onLogout }) => {
         }
     };
 
-    const handleTableClick = (table) => {
+    const handleTableClick = (tableId) => {
+        const table = tables.find(t => t.id === tableId);
+        if (!table) return;
+
         if (table.needs_cleaning) {
             setShowCleaningModal(true);
             return;
@@ -265,25 +277,59 @@ const WaiterDashboard = ({ activeWaiter, onLogout }) => {
             </div>
 
             {/* Mapa de Mesas (Grid View) */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-6 w-full max-w-7xl mx-auto flex-grow content-start">
-                {tables.map(table => (
-                    <button
-                        key={table.id}
-                        onClick={() => handleTableClick(table)}
-                        className={`
-                            relative flex flex-col items-center justify-center p-6 rounded-[2rem] border-2 shadow-sm transition-all hover:scale-[1.03] active:scale-95 focus:outline-none focus:ring-4 focus:ring-offset-2 w-full aspect-square
-                            ${getTableStyle(table)}
-                        `}
-                    >
-                        <span className="text-2xl mb-2">{getTableIcon(table)}</span>
-                        <span className="text-3xl font-black mb-1">{table.number}</span>
-                        <span className="text-[10px] font-bold uppercase tracking-widest opacity-70">
-                            {table.needs_cleaning ? 'Sucia' : table.status}
-                        </span>
-                    </button>
-                ))}
-            </div>
+            <main className="flex-1 p-4 overflow-y-auto max-w-7xl mx-auto w-full">
+                {/* --- FILTRO POR LUGARES/ÁREAS --- */}
+                <div className="mb-6">
+                    <h2 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3 px-1">Selecciona Ubicación</h2>
+                    <div className="flex flex-wrap gap-2">
+                        {locations.map(loc => (
+                            <button
+                                key={loc.id}
+                                onClick={() => setSelectedLocationId(loc.id)}
+                                className={`px-5 py-2.5 rounded-xl font-bold text-sm transition-all duration-300 shadow-sm border
+                                    ${selectedLocationId === loc.id
+                                        ? 'bg-purple-600 border-purple-600 text-white scale-105 shadow-purple-200'
+                                        : 'bg-white border-slate-200 text-slate-600 hover:border-purple-300 hover:bg-purple-50'}`}
+                            >
+                                {loc.name}
+                            </button>
+                        ))}
+                        {locations.length === 0 && (
+                            <p className="text-xs text-slate-400 italic">No hay ubicaciones configuradas.</p>
+                        )}
+                    </div>
+                </div>
 
+                <div className="grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3">
+                    {tables
+                        .filter(t => t.location_id === selectedLocationId)
+                        .map(table => (
+                            <button
+                                key={table.id}
+                                onClick={() => handleTableClick(table.id)}
+                                className={`aspect-square rounded-2xl flex flex-col items-center justify-center transition-all duration-300 transform border-2
+                                    ${table.status === 'ocupada' ? 'bg-rose-50 border-rose-100 shadow-rose-100/50' :
+                                        table.needs_cleaning ? 'bg-amber-50 border-amber-200 animate-pulse' :
+                                            'bg-white border-slate-100 shadow-slate-100/50 hover:border-emerald-400 group'}
+                                    active:scale-95 shadow-md
+                                `}
+                            >
+                                <span className="text-2xl mb-2">{getTableIcon(table)}</span>
+                                <span className="text-3xl font-black mb-1 text-slate-800">
+                                    {table.number}
+                                </span>
+                                <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 group-hover:text-emerald-600">
+                                    Mesa
+                                </span>
+                            </button>
+                        ))}
+                    {selectedLocationId && tables.filter(t => t.location_id === selectedLocationId).length === 0 && (
+                        <div className="col-span-full py-12 text-center bg-white rounded-3xl border-2 border-dashed border-slate-200">
+                            <p className="text-slate-400 font-medium">No hay mesas registradas en esta área.</p>
+                        </div>
+                    )}
+                </div>
+            </main>
             {/* MODAL CAMPANITA */}
             {showCleaningModal && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm">
@@ -311,7 +357,11 @@ const WaiterDashboard = ({ activeWaiter, onLogout }) => {
                                             <div className="flex items-center gap-3">
                                                 <span className="text-2xl">🏃‍♂️💨</span>
                                                 <div className="flex flex-col">
-                                                    <span className="font-bold text-blue-900">Mesa {order.table?.number}</span>
+                                                    <span className="font-bold text-blue-900 leading-tight">
+                                                        {order.table?.location?.name || 'Área'}
+                                                        {order.table?.name && <span className="text-xs font-normal"> ({order.table.name})</span>}
+                                                        <span className="block text-sm">Mesa {order.table?.number}</span>
+                                                    </span>
                                                     <span className="text-[10px] font-semibold text-blue-600 uppercase tracking-widest">Lista en barra</span>
                                                 </div>
                                             </div>
@@ -335,7 +385,11 @@ const WaiterDashboard = ({ activeWaiter, onLogout }) => {
                                         {dirtyTables.map(table => (
                                             <li key={table.id} className="flex items-center justify-between p-3 rounded-xl border border-amber-200 bg-amber-50">
                                                 <div className="flex flex-col">
-                                                    <span className="font-bold text-amber-900">Mesa {table.number}</span>
+                                                    <span className="font-bold text-amber-900 leading-tight">
+                                                        {table.location?.name || 'Área'}
+                                                        {table.name && <span className="text-xs font-normal"> ({table.name})</span>}
+                                                        <span className="block text-sm">Mesa {table.number}</span>
+                                                    </span>
                                                     <span className="text-[10px] font-semibold text-amber-600 uppercase tracking-widest">Sucia</span>
                                                 </div>
                                                 <button

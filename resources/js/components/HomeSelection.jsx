@@ -11,6 +11,7 @@ const HomeSelection = () => {
     });
     const [initialCheck, setInitialCheck] = useState(true);
     const [shiftActive, setShiftActive] = useState(false);
+    const [currentTime, setCurrentTime] = useState(new Date());
 
     useEffect(() => {
         const fetchData = async () => {
@@ -35,7 +36,11 @@ const HomeSelection = () => {
         };
         fetchData();
         const intervalId = setInterval(fetchData, 10000);
-        return () => clearInterval(intervalId);
+        const clockId = setInterval(() => setCurrentTime(new Date()), 1000);
+        return () => {
+            clearInterval(intervalId);
+            clearInterval(clockId);
+        };
     }, []);
 
     const getGreeting = () => {
@@ -49,6 +54,15 @@ const HomeSelection = () => {
         <div className="min-h-screen bg-slate-50 flex flex-col items-center py-8 md:py-12 px-4 sm:px-6 lg:px-8">
             <div className="max-w-md w-full mb-8 text-center">
                 <span className="text-xs font-bold text-slate-500 tracking-widest uppercase">{getGreeting()}</span>
+                <div className="mt-1">
+                    <span className="inline-block text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">
+                        🇪🇨 {currentTime.toLocaleString('es-EC', {
+                            timeZone: 'America/Guayaquil',
+                            weekday: 'short', day: '2-digit', month: 'short',
+                            hour: '2-digit', minute: '2-digit', second: '2-digit'
+                        })}
+                    </span>
+                </div>
                 {initialCheck ? (
                     // Pantalla de carga neutral: no muestra estado de jornada hasta saber la respuesta real
                     <div className="mt-4 flex flex-col items-center">
@@ -159,7 +173,7 @@ const HomeSelection = () => {
                     <p className="text-sm text-gray-400 mt-2 text-center">Estadísticas en tiempo real del restaurante.</p>
                 </Link>
             </div>
-        </div>
+        </div >
     );
 };
 

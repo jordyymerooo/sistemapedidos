@@ -19,6 +19,7 @@ const WaiterView = ({ activeWaiter, onLogout }) => {
     const [isSubmitting, setIsSubmitting] = useState(false); // Previene doble envío
     const [showCleaningModal, setShowCleaningModal] = useState(false);
     const [showReadyModal, setShowReadyModal] = useState(false); // Modal comandas
+    const [currentTime, setCurrentTime] = useState(new Date());
 
     // Redirigir si alguien entra aquí sin una mesa válida
     useEffect(() => {
@@ -34,7 +35,11 @@ const WaiterView = ({ activeWaiter, onLogout }) => {
     useEffect(() => {
         fetchData();
         const intervalId = setInterval(fetchData, 5000); // Polling por si el estado de mesas cambia
-        return () => clearInterval(intervalId);
+        const clockId = setInterval(() => setCurrentTime(new Date()), 1000);
+        return () => {
+            clearInterval(intervalId);
+            clearInterval(clockId);
+        };
     }, []);
 
     const fetchData = async () => {
@@ -202,10 +207,23 @@ const WaiterView = ({ activeWaiter, onLogout }) => {
             <div className="flex-1 p-4 md:p-6 overflow-y-auto w-full md:w-2/3">
                 <header className="mb-6 flex flex-col space-y-4 md:space-y-0 md:flex-row items-start md:items-center justify-between">
                     <div>
-                        <h1 className="text-2xl md:text-3xl font-black text-slate-800">Toma de Pedidos</h1>
+                        <h1 className="text-2xl md:text-3xl font-black text-slate-800">
+                            {(() => {
+                                const tbl = tables.find(t => t.id == selectedTable);
+                                return tbl && tbl.location ? tbl.location.name : `Mesa ${tbl?.number || selectedTable}`;
+                            })()}
+                        </h1>
                         <p className="text-sm text-slate-500 font-medium tracking-tight">
                             Atendiendo: <span className="text-blue-600 font-bold ml-1">{activeWaiter?.name || 'Mesero'}</span>
+                            <span className="ml-1 text-slate-400"> (Mesa {tables.find(t => t.id == selectedTable)?.number})</span>
                         </p>
+                        <span className="mt-1 inline-block text-xs font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">
+                            🇪🇨 {currentTime.toLocaleString('es-EC', {
+                                timeZone: 'America/Guayaquil',
+                                weekday: 'short', day: '2-digit', month: 'short',
+                                hour: '2-digit', minute: '2-digit', second: '2-digit'
+                            })}
+                        </span>
                     </div>
                     <div className="flex w-full md:w-auto items-center gap-3">
                         {/* Botón de Notificaciones Unificadas (Mesas Sucias + Comandas Listas) */}
@@ -260,7 +278,11 @@ const WaiterView = ({ activeWaiter, onLogout }) => {
                                                 <div className="flex items-center gap-3">
                                                     <span className="text-2xl">🏃‍♂️💨</span>
                                                     <div className="flex flex-col">
-                                                        <span className="font-bold text-blue-900">Mesa {order.table?.number}</span>
+                                                        <span className="font-bold text-blue-900 leading-tight">
+                                                            {order.table?.location?.name || 'Área'}
+                                                            {order.table?.name && <span className="text-xs font-normal"> ({order.table.name})</span>}
+                                                            <span className="block text-sm">Mesa {order.table?.number}</span>
+                                                        </span>
                                                         <span className="text-[10px] font-semibold text-blue-600 uppercase tracking-widest">Lista en barra</span>
                                                     </div>
                                                 </div>
@@ -284,7 +306,11 @@ const WaiterView = ({ activeWaiter, onLogout }) => {
                                             {dirtyTables.map(table => (
                                                 <li key={table.id} className="flex items-center justify-between p-3 rounded-xl border border-amber-200 bg-amber-50">
                                                     <div className="flex flex-col">
-                                                        <span className="font-bold text-amber-900">Mesa {table.number}</span>
+                                                        <span className="font-bold text-amber-900 leading-tight">
+                                                            {table.location?.name || 'Área'}
+                                                            {table.name && <span className="text-xs font-normal"> ({table.name})</span>}
+                                                            <span className="block text-sm">Mesa {table.number}</span>
+                                                        </span>
                                                         <span className="text-[10px] font-semibold text-amber-600 uppercase tracking-widest">Sucia</span>
                                                     </div>
                                                     <button
